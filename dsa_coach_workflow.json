@@ -1,0 +1,1718 @@
+{
+  "name": "DSA Coach",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1. Event API (extension -> n8n)\nOne endpoint: POST /webhook/dsa-coach/event\nevents: problem_started, session_end, submission, reflection, coach_requested",
+        "height": 150,
+        "width": 700,
+        "color": 4
+      },
+      "id": "4022e28d-ddd0-5799-a249-89ab49afb99d",
+      "name": "Note: ## 1. Event API (extension -> n8n)",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -560
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dsa-coach/event",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "5d9828a3-2ec5-58b6-923a-cea7d6eb0601",
+      "name": "DSA Coach Event Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "d31eb4b4-4b73-52bf-bd0e-b14f25f0a3ce"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst b = raw.body ?? raw;\nconst events = ['problem_started', 'session_end', 'submission', 'reflection', 'coach_requested'];\nconst uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nif (!events.includes(b.event)) throw new Error('Unsupported event: ' + b.event);\nif (!uuid.test(String(b.profile_id || ''))) throw new Error('profile_id must be a UUID');\nconst p = b.problem || {};\nconst slug = String(p.slug || b.problem_slug || '');\nconst diff = String(p.difficulty || 'Unknown');\nconst arr = v => Array.isArray(v) ? v.map(String) : [];\nconst int = v => Math.max(0, Math.round(Number(v) || 0));\nif (['problem_started', 'submission', 'coach_requested'].includes(b.event) && !slug) throw new Error('problem.slug is required');\nlet result = null;\nif (b.event === 'submission') {\n  result = String(b.result || '').trim().toLowerCase().replace(/[\\s-]+/g, '_');\n  const ok = ['accepted', 'wrong_answer', 'time_limit_exceeded', 'runtime_error', 'memory_limit_exceeded', 'compile_error', 'other'];\n  if (!ok.includes(result)) throw new Error('Unsupported result: ' + b.result);\n}\nif (b.event === 'reflection' && !uuid.test(String(b.attempt_id || ''))) throw new Error('attempt_id (uuid) is required for reflection');\nif (b.event === 'session_end' && !uuid.test(String(b.session_id || ''))) throw new Error('session_id (uuid) is required for session_end');\nconst conf = Number(b.confidence);\nconst ts = b.timestamp && !isNaN(Date.parse(b.timestamp)) ? new Date(b.timestamp).toISOString() : null;\nreturn [{ json: {\n  event: b.event,\n  profile_id: b.profile_id,\n  problem: {\n    slug,\n    title: String(p.title || slug),\n    difficulty: diff.charAt(0).toUpperCase() + diff.slice(1).toLowerCase(),\n    url: String(p.url || (slug ? 'https://leetcode.com/problems/' + slug + '/' : '')),\n    patterns: arr(p.patterns),\n    topics: arr(p.topics)\n  },\n  session_id: b.session_id || null,\n  attempt_id: b.attempt_id || null,\n  timestamp: ts,\n  result,\n  duration_seconds: int(b.duration_seconds),\n  active_seconds: int(b.active_seconds || b.duration_seconds),\n  hints_used: int(b.hints_used),\n  solution_viewed: b.solution_viewed === true,\n  editorial_viewed: b.editorial_viewed === true,\n  confidence: conf >= 1 && conf <= 5 ? Math.round(conf) : null,\n  error_types: arr(b.error_types),\n  reflection: b.reflection && typeof b.reflection === 'object' ? b.reflection : {},\n  request_type: b.request_type || 'hint',\n  hint_level: Number(b.hint_level) || null,\n  confirm_solution: b.confirm_solution === true\n} }];"
+      },
+      "id": "5acb9d43-0844-5379-a152-3ee2827f69d3",
+      "name": "Validate Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        250,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d718a133-b84c-49f7-82eb-6b40f6916003",
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "problem_started",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "problem_started"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "fdacc5be-eab8-463b-a036-a6632f115200",
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "session_end",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "session_end"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "6348bd85-2acd-4f7e-b516-1a035f1b211e",
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "submission",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "submission"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d0c0de50-c111-4986-8e9b-d04d81b15a2e",
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "reflection",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reflection"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "87fe3459-b6a7-455f-9b3d-54940233c77e",
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "coach_requested",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "coach_requested"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "62282a17-4980-5021-8272-74b135e41e19",
+      "name": "Route Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO problems (slug, title, difficulty, url, topics, patterns, updated_at)\nVALUES ($1, $2, $3, $4, $5::jsonb, derive_patterns($1, $5::jsonb, $6::jsonb), now())\nON CONFLICT (slug) DO UPDATE SET\n  title = EXCLUDED.title,\n  difficulty = EXCLUDED.difficulty,\n  url = COALESCE(NULLIF(EXCLUDED.url, ''), problems.url),\n  topics = CASE WHEN jsonb_array_length(EXCLUDED.topics) > 0 THEN EXCLUDED.topics ELSE problems.topics END,\n  patterns = CASE WHEN jsonb_array_length(EXCLUDED.patterns) > 0 THEN EXCLUDED.patterns ELSE problems.patterns END,\n  updated_at = now()\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [ $json.problem.slug, $json.problem.title, $json.problem.difficulty, $json.problem.url, JSON.stringify($json.problem.topics), JSON.stringify($json.problem.patterns) ] }}"
+        }
+      },
+      "id": "843d3870-5330-5dc6-9ea1-afede8490960",
+      "name": "Upsert Problem",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        750,
+        -420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO sessions (profile_id, problem_id, problem_slug, started_at)\nVALUES ($1::uuid, $2, $3, COALESCE($4::timestamptz, now()))\nRETURNING id, started_at;",
+        "options": {
+          "queryReplacement": "={{ [ $('Validate Event').first().json.profile_id, $json.id, $('Validate Event').first().json.problem.slug, $('Validate Event').first().json.timestamp ] }}"
+        }
+      },
+      "id": "cc8ea86a-87d5-5df4-9c46-285f4f81b704",
+      "name": "Create Session",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1000,
+        -420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT p.id AS pattern_id, p.name AS pattern, p.tier, p.weight, p.recognition_signals, p.common_mistakes,\n  COALESCE(s.mastery, s.prior_mastery, 0) AS mastery,\n  COALESCE(s.problems_solved, 0) AS problems_solved,\n  s.last_practiced, s.next_review,\n  CASE WHEN s.last_practiced IS NULL THEN NULL ELSE floor(extract(epoch FROM (now() - s.last_practiced)) / 86400)::int END AS days_since,\n  COALESCE(s.next_review <= now(), false) AS review_due\nFROM patterns p\nLEFT JOIN skills s ON s.pattern_id = p.id AND s.profile_id = $1::uuid\nWHERE p.name = ANY($2::text[])\nORDER BY p.weight DESC;",
+        "options": {
+          "queryReplacement": "={{ [ $('Validate Event').first().json.profile_id, $('Upsert Problem').first().json.patterns || [] ] }}"
+        }
+      },
+      "id": "5287ff44-dcc5-567f-923b-0bcce05e9b70",
+      "name": "Get Skill Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1250,
+        -420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ev = $('Validate Event').first().json;\nconst ses = $('Create Session').first().json;\nconst rows = $input.all().map(i => i.json).filter(r => r.pattern);\nconst pats = rows.map(r => ({\n  pattern: r.pattern,\n  mastery_pct: Math.round(Number(r.mastery || 0) * 100),\n  days_since: r.days_since,\n  review_due: r.review_due === true,\n  recognition_signals: r.recognition_signals\n}));\nconst weak = pats.filter(p => p.mastery_pct < 60);\nlet message;\nif (!pats.length) message = 'No pattern is mapped to this problem yet. Before coding, name the pattern and the constraint that decides the algorithm.';\nelse if (pats.some(p => p.review_due)) message = 'Review due: ' + pats.filter(p => p.review_due).map(p => p.pattern).join(', ') + '. Try it without hints.';\nelse if (weak.length) message = 'Focus on recognizing the pattern before coding: ' + weak.map(p => p.pattern).join(', ');\nelse message = 'Try independently first. Do not open hints unless you are genuinely stuck.';\nreturn [{ json: {\n  success: true,\n  event: 'problem_started',\n  session_id: ses.id,\n  problem: ev.problem,\n  mode: weak.length ? 'guided_practice' : 'independent_practice',\n  coach: { likely_pattern: pats[0] ? pats[0].pattern : null, patterns: pats, message }\n} }];"
+      },
+      "id": "ea928409-6046-5a31-afc3-acc468ff6411",
+      "name": "Build Problem Started Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        -420
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE sessions\nSET ended_at = now(), duration_seconds = $3::int, active_seconds = $4::int\nWHERE id = $1::uuid AND profile_id = $2::uuid\nRETURNING true AS success, 'session_end'::text AS event, id AS session_id, duration_seconds, active_seconds;",
+        "options": {
+          "queryReplacement": "={{ [ $json.session_id, $json.profile_id, $json.duration_seconds, $json.active_seconds ] }}"
+        }
+      },
+      "id": "fc79cc02-5876-5ed0-abd9-0220753e1c94",
+      "name": "Close Session",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        750,
+        -160
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH prob AS (\n  INSERT INTO problems (slug, title, difficulty, url, topics, patterns, updated_at)\n  VALUES ($2, $3, $4, $5, $6::jsonb, derive_patterns($2, $6::jsonb, $7::jsonb), now())\n  ON CONFLICT (slug) DO UPDATE SET\n    url = COALESCE(NULLIF(EXCLUDED.url, ''), problems.url),\n    topics = CASE WHEN jsonb_array_length(EXCLUDED.topics) > 0 THEN EXCLUDED.topics ELSE problems.topics END,\n    patterns = CASE WHEN jsonb_array_length(EXCLUDED.patterns) > 0 THEN EXCLUDED.patterns ELSE problems.patterns END,\n    updated_at = now()\n  RETURNING *\n), sess AS (\n  SELECT id, started_at FROM sessions WHERE id::text = $8 AND profile_id = $1::uuid\n), ins AS (\n  INSERT INTO attempts (profile_id, problem_id, problem_slug, problem_title, difficulty, session_id, attempt_number,\n    started_at, submitted_at, duration_seconds, result, hints_used, solution_viewed, editorial_viewed,\n    confidence, error_types, performance, source)\n  SELECT $1::uuid, prob.id, prob.slug, prob.title, prob.difficulty,\n    (SELECT id FROM sess),\n    (SELECT count(*) + 1 FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = prob.slug),\n    COALESCE((SELECT started_at FROM sess), COALESCE($16::timestamptz, now()) - make_interval(secs => $9::int)),\n    COALESCE($16::timestamptz, now()), $9::int, $10, $11::int, $12::boolean, $13::boolean,\n    $14::int, $15::jsonb,\n    CASE WHEN $10 = 'accepted' AND $11::int = 0 AND NOT $12::boolean AND NOT $13::boolean AND COALESCE($14::int, 5) >= 4 THEN 'strong'\n         WHEN $10 = 'accepted' THEN 'assisted' ELSE 'failed' END,\n    'extension'\n  FROM prob\n  RETURNING *\n)\nSELECT ins.*, prob.patterns, 'submission'::text AS _source\nFROM ins JOIN prob ON prob.id = ins.problem_id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.profile_id, $json.problem.slug, $json.problem.title, $json.problem.difficulty, $json.problem.url, JSON.stringify($json.problem.topics), JSON.stringify($json.problem.patterns), $json.session_id || '', $json.duration_seconds, $json.result, $json.hints_used, $json.solution_viewed, $json.editorial_viewed, $json.confidence, JSON.stringify($json.error_types), $json.timestamp ] }}"
+        }
+      },
+      "id": "94819c91-4236-5213-a5e4-2ea9934b2c7a",
+      "name": "Record Attempt",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        750,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH upd AS (\n  UPDATE attempts SET\n    reflection = $5::jsonb,\n    confidence = COALESCE($3::int, confidence),\n    error_types = CASE WHEN jsonb_array_length($4::jsonb) > 0 THEN $4::jsonb ELSE error_types END,\n    performance = CASE\n      WHEN result = 'accepted' AND COALESCE(hints_used, 0) = 0 AND NOT COALESCE(solution_viewed, false)\n        AND NOT COALESCE(editorial_viewed, false) AND COALESCE($3::int, confidence, 5) >= 4 THEN 'strong'\n      WHEN result = 'accepted' THEN 'assisted' ELSE 'failed' END\n  WHERE id = $2::uuid AND profile_id = $1::uuid\n  RETURNING *\n)\nSELECT upd.*, pr.patterns, 'reflection'::text AS _source\nFROM upd JOIN problems pr ON pr.id = upd.problem_id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.profile_id, $json.attempt_id, $json.confidence, JSON.stringify($json.error_types), JSON.stringify($json.reflection) ] }}"
+        }
+      },
+      "id": "888ba207-161c-5150-a141-b00c4d650bc1",
+      "name": "Save Reflection",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        750,
+        330
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "content": "## Skill engine (shared)\nsubmission / reflection / nightly sync all pass through here.\nMastery is re-derived from the full attempt history (nothing is overwritten).",
+        "height": 130,
+        "width": 1000,
+        "color": 5
+      },
+      "id": "0ca2c56d-8aec-5e03-9ac8-be02623c70eb",
+      "name": "Note: ## Skill engine (shared)",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH pats AS (\n  SELECT p.id, p.name FROM patterns p\n  WHERE cardinality($2::text[]) = 0 OR p.name = ANY($2::text[])\n), hist AS (\n  SELECT a.id, a.problem_slug, a.difficulty, a.result, a.hints_used, a.solution_viewed, a.editorial_viewed,\n    a.confidence, a.duration_seconds, a.error_types, a.submitted_at, a.source, pr.patterns\n  FROM attempts a JOIN problems pr ON pr.id = a.problem_id\n  WHERE a.profile_id = $1::uuid\n    AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(pr.patterns) x JOIN pats ON pats.name = x)\n)\nSELECT\n  (SELECT COALESCE(jsonb_agg(jsonb_build_object('id', id, 'name', name)), '[]'::jsonb) FROM pats) AS patterns,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(hist) ORDER BY hist.submitted_at), '[]'::jsonb) FROM hist) AS history,\n  (SELECT COALESCE(jsonb_agg(jsonb_build_object('name', p.name, 'prior_mastery', s.prior_mastery, 'review_interval_days', s.review_interval_days)), '[]'::jsonb)\n     FROM skills s JOIN patterns p ON p.id = s.pattern_id WHERE s.profile_id = $1::uuid) AS skills,\n  $3::jsonb AS attempt,\n  $1::text AS profile_id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.profile_id, $json.patterns || [], JSON.stringify($json) ] }}"
+        }
+      },
+      "id": "17f8652f-db1d-5ad4-9c37-163da5bf669c",
+      "name": "Load Skill Inputs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1000,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst att = d.attempt || {};\nconst src = att._source || 'recalc';\nconst pats = d.patterns || [];\nif (!d.profile_id || pats.length === 0) return [{ json: { skip: true, source: src, profile_id: d.profile_id || null } }];\n\nconst LADDER = [1, 3, 7, 14, 30, 60];\nconst DIFF_W = { Easy: 0.7, Medium: 1, Hard: 1.3 };\nconst imported = h => h.source === 'leetcode_sync' || h.source === 'import';\n\nconst score = h => {\n  if (h.result !== 'accepted') return 0.15;\n  let s = 1 - Math.min(Number(h.hints_used) || 0, 4) * 0.12;\n  if (h.solution_viewed || h.editorial_viewed) s = Math.min(s, 0.3);\n  if (imported(h)) s = Math.min(s, 0.65);\n  if (h.confidence) s *= 0.75 + 0.25 * (Number(h.confidence) / 5);\n  return Math.max(0, s);\n};\n\nreturn pats.map(p => {\n  const hs = (d.history || [])\n    .filter(h => (h.patterns || []).includes(p.name))\n    .sort((a, b) => new Date(a.submitted_at) - new Date(b.submitted_at));\n  const sk = (d.skills || []).find(s => s.name === p.name) || {};\n  const prior = sk.prior_mastery == null ? 0 : Number(sk.prior_mastery);\n\n  let num = 0, den = 0;\n  hs.forEach((h, i) => {\n    let w = (DIFF_W[h.difficulty] || 1) * Math.pow(0.9, hs.length - 1 - i);\n    if (h.result !== 'accepted') w *= 0.6;\n    if (imported(h)) w *= 0.6;\n    num += w * score(h);\n    den += w;\n  });\n  const PRIOR_W = 1.5;\n  const mastery = Math.max(0, Math.min(1, (num + PRIOR_W * prior) / (den + PRIOR_W)));\n\n  const solved = new Map();\n  hs.filter(h => h.result === 'accepted').forEach(h => solved.set(h.problem_slug, h.difficulty));\n  const cnt = k => [...solved.values()].filter(x => x === k).length;\n  const timed = hs.filter(h => h.result === 'accepted' && Number(h.duration_seconds) > 0);\n  const errs = {};\n  hs.forEach(h => (Array.isArray(h.error_types) ? h.error_types : []).forEach(e => { errs[e] = (errs[e] || 0) + 1; }));\n  const confs = hs.filter(h => h.confidence).slice(-5).map(h => Number(h.confidence));\n\n  // spaced repetition: 1,3,7,14,30,60 days; strong = climb, assisted = hold, failed = drop two rungs\n  const live = src === 'submission';\n  let idx = sk.review_interval_days ? LADDER.findIndex(x => x >= Number(sk.review_interval_days)) : -1;\n  if (live) {\n    if (att.performance === 'strong') idx = Math.min(idx + 1, LADDER.length - 1);\n    else if (att.performance === 'assisted') idx = Math.max(idx, 0);\n    else idx = Math.max(idx - 2, 0);\n  }\n  const interval = LADDER[Math.max(idx, 0)];\n\n  return { json: {\n    skip: false, source: src, profile_id: d.profile_id, pattern: p.name,\n    mastery: Number(mastery.toFixed(4)),\n    confidence: confs.length ? Number((confs.reduce((a, b) => a + b, 0) / confs.length).toFixed(2)) : null,\n    problems_solved: solved.size, easy_solved: cnt('Easy'), medium_solved: cnt('Medium'), hard_solved: cnt('Hard'),\n    problems_attempted: hs.length,\n    avg_time_seconds: timed.length ? Math.round(timed.reduce((a, h) => a + Number(h.duration_seconds), 0) / timed.length) : 0,\n    hint_rate: hs.length ? Number((hs.filter(h => Number(h.hints_used) > 0).length / hs.length).toFixed(3)) : 0,\n    failure_rate: hs.length ? Number((hs.filter(h => h.result !== 'accepted').length / hs.length).toFixed(3)) : 0,\n    last_practiced: hs.length ? hs[hs.length - 1].submitted_at : null,\n    review_interval_days: interval,\n    update_review: live,\n    error_profile: JSON.stringify(errs),\n    result: att.result || 'recalc'\n  } };\n});"
+      },
+      "id": "d364af3b-e297-50ed-ac80-bf1d707eb1b2",
+      "name": "Compute Skill Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH pat AS (\n  SELECT id FROM patterns WHERE name = $2 AND NOT $19::boolean\n), up AS (\n  INSERT INTO skills (profile_id, pattern_id, mastery, confidence, problems_solved, easy_solved, medium_solved, hard_solved,\n    problems_attempted, avg_time_seconds, hint_rate, failure_rate, last_practiced, next_review, review_interval_days,\n    error_profile, updated_at)\n  SELECT $1::uuid, pat.id, $3::numeric, $4::numeric, $5::int, $6::int, $7::int, $8::int,\n    $9::int, $10::int, $11::numeric, $12::numeric, $13::timestamptz,\n    now() + make_interval(days => $14::int), $14::int, $16::jsonb, now()\n  FROM pat\n  ON CONFLICT (profile_id, pattern_id) DO UPDATE SET\n    mastery = EXCLUDED.mastery,\n    confidence = COALESCE(EXCLUDED.confidence, skills.confidence),\n    problems_solved = EXCLUDED.problems_solved, easy_solved = EXCLUDED.easy_solved,\n    medium_solved = EXCLUDED.medium_solved, hard_solved = EXCLUDED.hard_solved,\n    problems_attempted = EXCLUDED.problems_attempted, avg_time_seconds = EXCLUDED.avg_time_seconds,\n    hint_rate = EXCLUDED.hint_rate, failure_rate = EXCLUDED.failure_rate,\n    last_practiced = COALESCE(EXCLUDED.last_practiced, skills.last_practiced),\n    next_review = CASE WHEN $15::boolean THEN EXCLUDED.next_review ELSE COALESCE(skills.next_review, EXCLUDED.next_review) END,\n    review_interval_days = CASE WHEN $15::boolean THEN EXCLUDED.review_interval_days ELSE COALESCE(skills.review_interval_days, EXCLUDED.review_interval_days) END,\n    error_profile = EXCLUDED.error_profile, updated_at = now()\n  RETURNING mastery, confidence, problems_solved, problems_attempted, next_review, review_interval_days\n), closed AS (\n  UPDATE reviews SET completed_at = now(), result = $18\n  WHERE profile_id = $1::uuid AND pattern_id IN (SELECT id FROM pat) AND completed_at IS NULL AND $15::boolean\n  RETURNING 1\n), rv AS (\n  INSERT INTO reviews (profile_id, pattern_id, scheduled_for, result, interval_days)\n  SELECT $1::uuid, pat.id, now() + make_interval(days => $14::int), 'pending', $14::int\n  FROM pat WHERE $15::boolean\n  RETURNING 1\n)\nSELECT $2::text AS pattern, up.mastery, up.confidence, up.problems_solved, up.problems_attempted,\n  up.next_review, up.review_interval_days, $17::text AS source\nFROM (SELECT 1) d LEFT JOIN up ON true;",
+        "options": {
+          "queryReplacement": "={{ [ $json.profile_id, $json.pattern || '', $json.mastery ?? 0, $json.confidence ?? null, $json.problems_solved ?? 0, $json.easy_solved ?? 0, $json.medium_solved ?? 0, $json.hard_solved ?? 0, $json.problems_attempted ?? 0, $json.avg_time_seconds ?? 0, $json.hint_rate ?? 0, $json.failure_rate ?? 0, $json.last_practiced ?? null, $json.review_interval_days ?? 1, $json.update_review === true, $json.error_profile || '{}', $json.source, $json.result || 'recalc', $json.skip === true ] }}"
+        }
+      },
+      "id": "d03f3619-3de0-5268-9acf-51ff4be1cc81",
+      "name": "Upsert Skill",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1500,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cf67ad89-d1b2-41d4-be0c-3762235920e0",
+              "leftValue": "={{ $json.source }}",
+              "rightValue": "recalc",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1f424f97-feed-5aaf-bc21-ab2afef5e011",
+      "name": "Live Event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1750,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Load Skill Inputs').first().json;\nconst a = ctx.attempt || {};\nconst skills = $input.all().map(i => i.json)\n  .filter(r => r.pattern && r.mastery !== null && r.mastery !== undefined)\n  .map(r => ({ pattern: r.pattern, mastery_pct: Math.round(Number(r.mastery) * 100), problems_solved: r.problems_solved, review_interval_days: r.review_interval_days, next_review: r.next_review }));\nconst isReflection = a._source === 'reflection';\nlet message, next;\nif (isReflection) { message = 'Reflection saved. Your skill profile was re-scored with it.'; next = 'continue'; }\nelse if (a.result === 'accepted' && a.performance === 'strong') { message = 'Independent solve. Real evidence that the pattern is sticking.'; next = 'review_later'; }\nelse if (a.result === 'accepted') { message = 'Accepted, but assisted. It will come back for an unaided review.'; next = 'spaced_review'; }\nelse { message = 'Useful evidence. Name the exact failure before you retry.'; next = 'diagnose_and_retry'; }\nreturn [{ json: {\n  success: true,\n  event: isReflection ? 'reflection' : 'submission',\n  attempt_id: a.id || null,\n  attempt_number: a.attempt_number || null,\n  result: a.result || null,\n  performance: a.performance || null,\n  skills_updated: skills,\n  coach: { message, next_action: next,\n    ask_reflection: !isReflection && a.result === 'accepted',\n    ask_error_types: !isReflection && a.performance !== 'strong' }\n} }];"
+      },
+      "id": "20670ecb-f407-57b4-99b6-6aedd4ca4115",
+      "name": "Build Submission Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH names AS (\n  SELECT COALESCE(\n    NULLIF($3::jsonb, '[]'::jsonb),\n    NULLIF((SELECT patterns FROM problems WHERE slug = $2), '[]'::jsonb),\n    derive_patterns($2, $4::jsonb, '[]'::jsonb)\n  ) AS arr\n)\nSELECT (\n  SELECT COALESCE(jsonb_agg(jsonb_build_object(\n      'pattern', p.name, 'recognition_signals', p.recognition_signals, 'common_mistakes', p.common_mistakes,\n      'template', p.template, 'mastery', COALESCE(s.mastery, s.prior_mastery, 0))), '[]'::jsonb)\n  FROM patterns p\n  LEFT JOIN skills s ON s.pattern_id = p.id AND s.profile_id = $1::uuid\n  WHERE p.name IN (SELECT jsonb_array_elements_text(arr) FROM names)\n) AS patterns;",
+        "options": {
+          "queryReplacement": "={{ [ $json.profile_id, $json.problem.slug, JSON.stringify($json.problem.patterns), JSON.stringify($json.problem.topics) ] }}"
+        }
+      },
+      "id": "9160214d-1a83-5336-b590-6af0f533c49f",
+      "name": "Get Hint Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        750,
+        620
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ev = $('Validate Event').first().json;\nconst ctx = $input.first().json;\nconst pats = (ctx.patterns || []).slice().sort((a, b) => Number(a.mastery) - Number(b.mastery));\nconst main = pats[0] || null;\nlet level = ev.hint_level\n  || (ev.request_type === 'hint' && ev.hints_used > 0 ? ev.hints_used + 1 : null)\n  || ({ initial_guidance: 1, hint: 2, approach: 3, solution: 5 }[ev.request_type] || 1);\nlevel = Math.max(1, Math.min(5, level));\nif (level === 5 && !ev.confirm_solution) level = 4;\nconst name = main ? main.pattern : null;\nconst sig = main && main.recognition_signals ? main.recognition_signals : 'the input structure and the constraint that rules out the naive approach';\nlet hint = '';\nif (level === 1) hint = 'Recognition: reread the statement and look for ' + sig + '. What does that suggest?';\nelse if (level === 2) hint = name ? 'Direction: this fits ' + name + '. What state must you maintain as you process the input, and when does it become invalid?' : 'Direction: define the smallest state you must remember while scanning the input.';\nelse if (level === 3) hint = main && main.template ? 'Approach: ' + main.template : 'Approach: write the brute force first, then find the repeated work to remove.';\nif (level <= 3 && main && main.common_mistakes) hint += ' Watch out for: ' + main.common_mistakes + '.';\nreturn [{ json: { level, pattern: name, hint, needs_ai: level >= 4, next_level: Math.min(5, level + 1), problem: ev.problem } }];"
+      },
+      "id": "23bd7e33-0c79-5045-9b6e-067be22d45c7",
+      "name": "Build Hint",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2e1ad67f-5ad4-47ac-839c-298ee9e98aa9",
+              "leftValue": "={{ $json.needs_ai }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ff2fea16-cd46-5331-a1f5-51e50427e4b2",
+      "name": "Needs AI?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1250,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "={{ JSON.stringify({ problem: $json.problem, pattern: $json.pattern, level: $json.level }) }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "instructions": "You are a DSA interview coach. You receive a LeetCode problem, its likely pattern and a hint level. Level 4 = a detailed approach as short numbered steps with the key invariant and complexity, NO code. Level 5 = the complete solution with code and complexity, because the learner explicitly asked for it. Never give more than the level allows. Under 250 words.",
+          "maxTokens": 700
+        }
+      },
+      "id": "e359394d-a8c3-56c6-b361-c7d743519092",
+      "name": "Explain With AI",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1500,
+        520
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "PLACEHOLDER",
+          "name": "OpenAI account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Build Hint').first().json;\nconst cur = $input.first().json;\nconst ai = cur.output && cur.output[0] && cur.output[0].content && cur.output[0].content[0] && cur.output[0].content[0].text;\nlet hint = base.hint, source = 'template';\nif (base.needs_ai) {\n  if (ai) { hint = ai; source = 'ai'; }\n  else hint = 'The AI step is unavailable right now. Use hint level 3, or retry in a moment.';\n}\nreturn [{ json: { success: true, event: 'coach_requested', hint_level: base.level,\n  coach: { pattern: base.pattern, hint, source, next_level: base.next_level, reveal_solution: base.level === 5 } } }];"
+      },
+      "id": "10077ee2-2ec6-55cb-b216-054a1e8a2cfe",
+      "name": "Finalize Hint",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1750,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "9a01d392-ae1d-58ce-a133-a4753b9dcaf3",
+      "name": "Return Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2. Daily plan\n7 AM email + POST /webhook/dsa-coach/plan (extension can fetch it)\nMode (build/consolidate/mock/taper/restart) -> priority = weight x gap x forgetting -> difficulty controller -> problems from your target sets",
+        "height": 150,
+        "width": 900,
+        "color": 6
+      },
+      "id": "852d9a19-4930-58bd-85c5-c8c01f49b1c3",
+      "name": "Note: ## 2. Daily plan",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        780
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "id": "8289619f-1b8d-5af4-9a8b-cfb200477d11",
+      "name": "Every Morning 7AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        950
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dsa-coach/plan",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "180a8c12-1591-5b73-b736-0bb706979cce",
+      "name": "Plan Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        1100
+      ],
+      "webhookId": "6b3a44e4-5729-5894-a0a9-7f8ffab2cbd8"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT p.id AS profile_id, $2::text AS via\nFROM profiles p\nWHERE $1::text = '' OR p.id = NULLIF($1::text, '')::uuid\nORDER BY p.created_at\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [ $json.body ? ($json.body.profile_id || '') : '', $json.body ? 'webhook' : 'schedule' ] }}"
+        }
+      },
+      "id": "8f257601-37b7-5749-be6d-f646f51b1dd8",
+      "name": "Resolve Profile",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        250,
+        1025
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH pf AS (\n  SELECT p.*, $2::text AS via FROM profiles p WHERE p.id = $1::uuid\n), pats AS (\n  SELECT p.name, p.topic, p.tier, p.weight, p.prerequisites, p.recognition_signals,\n    COALESCE(s.mastery, 0) AS mastery, s.prior_mastery, s.last_practiced, s.next_review,\n    COALESCE(s.problems_attempted, 0) AS attempted,\n    CASE WHEN s.last_practiced IS NULL THEN NULL ELSE floor(extract(epoch FROM (now() - s.last_practiced)) / 86400)::int END AS days_since,\n    COALESCE(s.next_review <= now(), false) AS review_due\n  FROM patterns p LEFT JOIN skills s ON s.pattern_id = p.id AND s.profile_id = $1::uuid\n), cand AS (\n  SELECT t.set_name, t.position, t.slug, t.title, t.difficulty, t.patterns, t.url,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug) AS tries,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug AND a.result = 'accepted') AS accepted_count,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug AND a.performance = 'strong') AS strong_count,\n    (SELECT max(a.submitted_at) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug) AS last_attempt_at\n  FROM target_set_problems t\n  WHERE t.set_name = ANY(COALESCE((SELECT target_sets FROM pf), ARRAY['starter']))\n)\nSELECT\n  (SELECT to_jsonb(pf) FROM pf) AS profile,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(pats)), '[]'::jsonb) FROM pats) AS patterns,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(r)), '[]'::jsonb) FROM (\n     SELECT a.difficulty, a.result, a.performance, a.hints_used, a.submitted_at, a.problem_slug\n     FROM attempts a WHERE a.profile_id = $1::uuid ORDER BY a.submitted_at DESC LIMIT 8) r) AS recent,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(cand)), '[]'::jsonb) FROM cand) AS candidates,\n  (SELECT max(submitted_at) FROM attempts WHERE profile_id = $1::uuid) AS last_attempt_at,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(pl)), '[]'::jsonb) FROM (\n     SELECT plan_date, mode, restart_step FROM plans\n     WHERE profile_id = $1::uuid AND plan_date < current_date ORDER BY plan_date DESC LIMIT 4) pl) AS recent_plans,\n  extract(dow FROM now())::int AS dow,\n  current_date::text AS today;",
+        "options": {
+          "queryReplacement": "={{ [ $json.profile_id, $json.via ] }}"
+        }
+      },
+      "id": "ca60ff1a-91af-5859-b5be-9d38613c89d4",
+      "name": "Load Planning Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        500,
+        1025
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pf = d.profile;\nif (!pf) throw new Error('No profile found. POST /webhook/dsa-coach/cold-start first (or insert a row into profiles).');\nconst DAY = 86400000, now = new Date();\nconst pats = d.patterns || [], cands = d.candidates || [], recent = d.recent || [];\nconst budget = Number(pf.daily_minutes) || (Number(pf.hours_per_week) ? Math.round(Number(pf.hours_per_week) * 60 / 7) : 45);\nconst gapDays = d.last_attempt_at ? Math.floor((now - new Date(d.last_attempt_at)) / DAY) : null;\nconst toTarget = pf.target_date ? Math.ceil((new Date(pf.target_date) - now) / DAY) : null;\n\n// ---- 1. coach mode -------------------------------------------------------\nlet mode = 'build', restartStep = 0;\nif (toTarget !== null) mode = toTarget <= 3 ? 'taper' : toTarget <= 14 ? 'mock' : toTarget <= 28 ? 'consolidate' : 'build';\nconst prev = (d.recent_plans || []).find(p => Number(p.restart_step) > 0);\nconst prevAge = prev ? (new Date(d.today) - new Date(prev.plan_date)) / DAY : 99;\nif (mode !== 'taper') {\n  if (gapDays !== null && gapDays >= 5) { mode = 'restart'; restartStep = 1; }\n  else if (prev && Number(prev.restart_step) === 1 && prevAge <= 2 && gapDays !== null && gapDays <= 1) { mode = 'restart'; restartStep = 2; }\n}\n\n// ---- 2. difficulty controller (recent evidence, not totals) ---------------\nconst NAMES = ['Easy', 'Medium', 'Hard'], IDX = { Easy: 0, Medium: 1, Hard: 2 };\nlet trend = 0;\nconst l4 = recent.slice(0, 4), l2 = recent.slice(0, 2);\nif (l4.length === 4 && l4.filter(r => r.performance === 'strong').length >= 3) trend = 1;\nif (l2.length === 2 && l2.every(r => r.result !== 'accepted')) trend = -1;\nconst want = p => NAMES[Math.max(0, Math.min(2, (p.m < 0.35 ? 0 : p.m < 0.7 ? 1 : 2) + trend))];\n\n// ---- 3. priority = weight x gap x forgetting ------------------------------\nconst byName = Object.fromEntries(pats.map(p => [p.name, p]));\nconst target = t => ({ A: 0.8, B: 0.65, C: 0.5 }[t] || 0.6);\nconst scored = pats.map(p => {\n  const w = Number(p.weight) || 0.5, m = Number(p.mastery) || 0;\n  const gap = Math.max(0.05, target(p.tier) - m);\n  let f = 1;\n  if (p.days_since !== null && p.days_since !== undefined) f += Math.min(1.5, p.days_since / 14);\n  if (p.review_due) f += 0.5;\n  const uncal = Number(p.attempted) === 0 && m > 0;\n  if (uncal) f += 0.3;\n  const blocked = (p.prerequisites || []).some(q => byName[q] && Number(byName[q].mastery) < 0.35);\n  let priority = w * gap * f;\n  if (blocked && mode === 'build') priority *= 0.4;\n  if (mode === 'build' && Number(p.attempted) === 0) priority *= 1.15;\n  if (mode === 'consolidate' && Number(p.attempted) > 0) priority *= 1.2;\n  if (mode === 'taper' && m < 0.5) priority *= 0.3;\n  return { ...p, w, m, gap, f, uncal, blocked, priority };\n}).sort((a, b) => b.priority - a.priority);\n\n// ---- 4. problem picking from curated target sets -------------------------\nconst used = new Set();\nconst kind = c => Number(c.accepted_count) > 0 ? (Number(c.strong_count) > 0 ? 'mastered' : 'assisted') : (Number(c.tries) > 0 ? 'failed' : 'new');\nconst ageDays = c => c.last_attempt_at ? (now - new Date(c.last_attempt_at)) / DAY : 0;\nconst pick = (name, diff, kinds) => {\n  const fit = c => 1 - 0.5 * Math.abs((IDX[c.difficulty] ?? 1) - IDX[diff]) + (kind(c) === 'failed' ? 0.3 : 0)\n    + (kind(c) === 'assisted' ? Math.min(ageDays(c), 30) * 0.01 : 0) - Number(c.position) * 0.001;\n  const c = cands.filter(x => (x.patterns || []).includes(name) && !used.has(x.slug) && kinds.includes(kind(x))).sort((a, b) => fit(b) - fit(a))[0];\n  if (c) used.add(c.slug);\n  return c || null;\n};\nconst prob = c => c ? { slug: c.slug, title: c.title, difficulty: c.difficulty, url: c.url } : null;\nconst mins = dif => dif === 'Easy' ? 15 : dif === 'Medium' ? 25 : 35;\nconst why = p => 'weight ' + p.w.toFixed(2) + ' x gap ' + p.gap.toFixed(2) + ' x forgetting ' + p.f.toFixed(2)\n  + (p.review_due ? ', review due' : '') + (p.uncal ? ', self-rating not verified yet' : '')\n  + (p.blocked && mode === 'build' ? ', prerequisite still weak' : '');\nconst newItem = (p, type, w) => {\n  const dif = w || want(p);\n  const c = pick(p.name, dif, ['failed', 'new']) || pick(p.name, dif, ['assisted']);\n  const d2 = c ? c.difficulty : dif;\n  return { type: p.uncal && type === 'new' ? 'calibration' : type, pattern: p.name, minutes: mins(d2), difficulty: d2, problem: prob(c),\n    note: c ? null : 'No curated ' + d2 + ' problem for ' + p.name + '. Pick any ' + d2 + ' problem tagged with it.', reason: why(p) };\n};\nconst reviewItem = (p, w) => {\n  const dif = w || (p.m < 0.5 ? 'Easy' : 'Medium');\n  const c = pick(p.name, dif, ['assisted', 'failed']) || pick(p.name, dif, ['new']);\n  return { type: 'review', pattern: p.name, minutes: 15, difficulty: c ? c.difficulty : dif, problem: prob(c),\n    note: c ? null : 'No curated problem left for ' + p.name + '. Redo any problem you solved with help.', reason: why(p) };\n};\n\n// ---- 5. assemble the plan --------------------------------------------------\nlet items = [], message = '';\nconst practiced = scored.filter(p => Number(p.attempted) > 0);\nconst mockDay = mode !== 'restart' && mode !== 'taper' && d.dow === Number(pf.mock_weekday ?? 6);\nif (mode === 'restart' && restartStep === 1) {\n  const strong = practiced.slice().sort((a, b) => b.m - a.m)[0] || scored[0];\n  items = [{ ...newItem(strong, 'restart_easy', 'Easy') }];\n  message = \"Welcome back. Let's rebuild momentum. One easy win today, nothing more.\";\n} else if (mode === 'restart') {\n  const decayed = practiced.slice().sort((a, b) => (b.days_since || 0) - (a.days_since || 0)).slice(0, 2);\n  while (decayed.length < 2 && scored[decayed.length]) decayed.push(scored[decayed.length]);\n  items = decayed.map(p => ({ ...reviewItem(p), type: 'decay_review' }));\n  message = 'Good to see you back. Two problems from the patterns that faded the most, then we return to the normal load.';\n} else if (mode === 'taper') {\n  const light = practiced.filter(p => p.m >= 0.4).sort((a, b) => b.f - a.f).slice(0, 3);\n  items = (light.length ? light : practiced.slice(0, 2)).map(p => reviewItem(p, 'Easy'));\n  message = 'Taper: light review only, no new topics. Sleep matters more than one more problem.';\n} else if (mockDay) {\n  const a = scored[0], b2 = scored[1] || scored[0];\n  const hardOk = b2.m >= 0.6 && trend >= 0;\n  items = [{ ...newItem(a, 'mock', 'Medium'), minutes: 22, timed: true }, { ...newItem(b2, 'mock', hardOk ? 'Hard' : 'Medium'), minutes: 23, timed: true }];\n  message = 'Weekly mock: 45 minutes, two problems, no hints. After each one, say the pattern and complexity out loud.';\n} else {\n  const pool = mode === 'consolidate' && practiced.length ? practiced : scored;\n  const P1 = pool[0], P2 = pool.find(p => p !== P1);\n  const R = scored.filter(p => Number(p.attempted) > 0 && (p.review_due || (p.days_since || 0) >= 7) && p !== P1 && p !== P2)\n    .sort((a, b) => b.f * b.w - a.f * a.w)[0];\n  const comps = [newItem(P1, 'new')];\n  if (R) comps.push(reviewItem(R));\n  if (P1.m < 0.6) comps.push({ type: 'recognition', pattern: P1.name, minutes: 5, detail: P1.recognition_signals, reason: 'Recognition is the real skill for ' + P1.name });\n  comps.push({ type: 'explain', pattern: P1.name, minutes: 10, detail: \"For today's main problem, state the pattern, why it fits, time and space complexity.\", reason: 'Interview communication' });\n  if (P2) comps.push(newItem(P2, 'new'));\n  let used2 = 0;\n  const chosen = [];\n  comps.forEach((c, i) => { if (i === 0 || used2 + c.minutes <= budget) { chosen.push(c); used2 += c.minutes; } });\n  const order = { recognition: 0, new: 1, calibration: 1, review: 2, explain: 3 };\n  let seenMain = 0;\n  chosen.sort((a, b) => (order[a.type] ?? 1) - (order[b.type] ?? 1));\n  items = chosen.map(c => mode === 'mock' && c.problem ? { ...c, timed: true } : c);\n  message = mode[0].toUpperCase() + mode.slice(1) + ' mode' + (toTarget !== null ? ' - ' + toTarget + ' days to target' : '') + '. Top focus: ' + P1.name + '.'\n    + (trend === -1 ? ' Recent attempts were rough, so difficulty is lowered and this pattern is reviewed first.' : trend === 1 ? ' You are on a strong run, so difficulty steps up.' : '');\n}\nconst plan = {\n  plan_date: d.today, mode, restart_step: restartStep, days_to_target: toTarget, budget_minutes: budget,\n  total_minutes: items.reduce((s, x) => s + x.minutes, 0), message, difficulty_trend: trend,\n  items: items.map((x, i) => ({ order: i + 1, ...x })),\n  priorities: scored.slice(0, 6).map(p => ({ pattern: p.name, tier: p.tier, mastery: Number(p.m.toFixed(2)), priority: Number(p.priority.toFixed(3)), days_since: p.days_since, review_due: p.review_due }))\n};\nreturn [{ json: { profile_id: pf.id, email: pf.email, via: pf.via, plan } }];"
+      },
+      "id": "50873421-cfdb-5e0d-b24b-a9901334f25b",
+      "name": "Priority Engine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        750,
+        1025
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO plans (profile_id, plan_date, mode, restart_step, total_minutes, message, items, priorities)\nVALUES ($1::uuid, $2::date, $3, $4::int, $5::int, $6, $7::jsonb, $8::jsonb)\nON CONFLICT (profile_id, plan_date) DO UPDATE SET\n  mode = EXCLUDED.mode, restart_step = EXCLUDED.restart_step, total_minutes = EXCLUDED.total_minutes,\n  message = EXCLUDED.message, items = EXCLUDED.items, priorities = EXCLUDED.priorities, created_at = now()\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.profile_id, $json.plan.plan_date, $json.plan.mode, $json.plan.restart_step, $json.plan.total_minutes, $json.plan.message, JSON.stringify($json.plan.items), JSON.stringify($json.plan.priorities) ] }}"
+        }
+      },
+      "id": "2a73f91c-0fe9-57bf-9dd4-579a63758a31",
+      "name": "Save Plan",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1000,
+        1025
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fdd71807-bc36-4f6c-932f-4558b6820d46",
+              "leftValue": "={{ $('Priority Engine').first().json.via }}",
+              "rightValue": "webhook",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0c5dc8a7-2336-50ab-ac7c-09a7e804b323",
+      "name": "Requested Via Webhook?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1250,
+        1025
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, plan: $('Priority Engine').first().json.plan } }}",
+        "options": {}
+      },
+      "id": "15fe7e6a-06c9-52a6-8ca6-2cf6ef2d41c5",
+      "name": "Return Plan",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1500,
+        950
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { plan, email } = $('Priority Engine').first().json;\nconst label = { new: 'New', calibration: 'Calibrate', review: 'Review', recognition: 'Recognize', explain: 'Explain', mock: 'Mock', restart_easy: 'Easy win', decay_review: 'Refresh' };\nconst colour = { new: '#16a34a', calibration: '#0891b2', review: '#2563eb', recognition: '#7c3aed', explain: '#ca8a04', mock: '#dc2626', restart_easy: '#16a34a', decay_review: '#2563eb' };\nconst rows = plan.items.map(i => {\n  const what = i.problem\n    ? '<a href=\"' + i.problem.url + '\" style=\"color:#111;font-weight:600;text-decoration:none;\">' + i.problem.title + '</a> <span style=\"color:#888;\">(' + i.problem.difficulty + ')</span>'\n    : '<b>' + i.pattern + '</b>' + (i.note ? '<br><span style=\"color:#b45309;font-size:12px;\">' + i.note + '</span>' : '');\n  const extra = i.detail ? '<br><span style=\"color:#555;font-size:13px;\">' + i.detail + '</span>' : '';\n  return '<tr><td style=\"padding:10px 8px;border-bottom:1px solid #eee;\">' + i.order + '</td>'\n    + '<td style=\"padding:10px 8px;border-bottom:1px solid #eee;\"><span style=\"background:' + (colour[i.type] || '#555') + ';color:#fff;border-radius:4px;padding:2px 8px;font-size:12px;\">' + (label[i.type] || i.type) + '</span></td>'\n    + '<td style=\"padding:10px 8px;border-bottom:1px solid #eee;\">' + what + '<br><span style=\"color:#888;font-size:12px;\">' + i.pattern + '</span>' + extra + '</td>'\n    + '<td style=\"padding:10px 8px;border-bottom:1px solid #eee;\">' + i.minutes + ' min' + (i.timed ? ' (timed)' : '') + '</td>'\n    + '<td style=\"padding:10px 8px;border-bottom:1px solid #eee;color:#666;font-size:12px;\">' + (i.reason || '') + '</td></tr>';\n}).join('');\nconst html = '<div style=\"font-family:Arial,Helvetica,sans-serif;max-width:680px;margin:0 auto;\">'\n  + '<h2 style=\"margin-bottom:2px;\">Today: ' + plan.plan_date + ' &middot; ' + plan.total_minutes + ' min</h2>'\n  + '<p style=\"color:#444;margin-top:4px;\">' + plan.message + '</p>'\n  + '<table style=\"border-collapse:collapse;width:100%;font-size:14px;\"><tr style=\"text-align:left;color:#888;font-size:12px;\"><th>#</th><th>Type</th><th>Task</th><th>Time</th><th>Why</th></tr>' + rows + '</table>'\n  + '<p style=\"color:#999;font-size:12px;margin-top:16px;\">After each solve, submit the reflection in the side panel. That is what tunes tomorrow.</p></div>';\nreturn [{ json: { email, subject: 'DSA Coach - ' + plan.mode + ' - ' + plan.total_minutes + ' min', html } }];"
+      },
+      "id": "383ad5a7-86ef-5bf6-82db-a5b504f68a61",
+      "name": "Format Plan Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "de7864c0-236b-57d2-b3d7-c1b1176726d1",
+      "name": "Email Daily Plan",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1750,
+        1100
+      ],
+      "webhookId": "0e627878-d367-5d8c-9d29-b1b355cb0654",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "juN4KqhMrHsjtJ3U",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## 3. LeetCode sync (3 AM + after cold start)\nImports your recent accepted solves (as 'assisted-unknown' evidence, never as mastery),\nthen re-derives every skill from history. LeetCode only exposes the last ~20 accepted submissions.",
+        "height": 150,
+        "width": 1000,
+        "color": 3
+      },
+      "id": "2918735b-db6e-5dfe-a1cd-d3c54322e74f",
+      "name": "Note: ## 3. LeetCode sync (3 AM + after cold s",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 3
+            }
+          ]
+        }
+      },
+      "id": "4663bbb1-925c-5073-8340-00d0d637080a",
+      "name": "Every Night 3AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        1450
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id AS profile_id, leetcode_username, COALESCE(last_synced_at, 'epoch'::timestamptz) AS since\nFROM profiles\nWHERE leetcode_username IS NOT NULL AND leetcode_username <> '';",
+        "options": {}
+      },
+      "id": "ebd563b3-edf4-586b-a450-b504455c6554",
+      "name": "Get Sync Profiles",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        250,
+        1450
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://leetcode.com/graphql",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Referer",
+              "value": "https://leetcode.com"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (n8n DSA Coach)"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"query\":\"query recentAc($u:String!,$l:Int){recentAcSubmissionList(username:$u,limit:$l){id title titleSlug timestamp}}\",\"variables\":{\"u\":\"{{ $json.leetcode_username }}\",\"l\":20}}",
+        "options": {}
+      },
+      "id": "1edba69d-a0ca-5f90-802f-fcb69aef06eb",
+      "name": "Fetch Recent Solves",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        500,
+        1450
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const profiles = $('Get Sync Profiles').all();\nconst out = [];\n$input.all().forEach((item, i) => {\n  const pf = profiles[i] && profiles[i].json;\n  if (!pf) return;\n  const since = new Date(pf.since).getTime() / 1000;\n  const subs = (item.json && item.json.data && item.json.data.recentAcSubmissionList) || [];\n  const seen = new Set();\n  for (const s of subs) {\n    const ts = Number(s.timestamp);\n    if (ts > since && !seen.has(s.titleSlug)) {\n      seen.add(s.titleSlug);\n      out.push({ json: { profile_id: pf.profile_id, titleSlug: s.titleSlug, title: s.title, timestamp: String(s.timestamp) } });\n    }\n  }\n});\nreturn out;"
+      },
+      "id": "5cf6b891-4be4-5568-9ff1-5ec98035087d",
+      "name": "Filter Recent Solves",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        750,
+        1450
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://leetcode.com/graphql",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Referer",
+              "value": "https://leetcode.com"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (n8n DSA Coach)"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"query\":\"query q($s:String!){question(titleSlug:$s){questionFrontendId difficulty topicTags{name}}}\",\"variables\":{\"s\":\"{{ $json.titleSlug }}\"}}",
+        "options": {}
+      },
+      "id": "b2d4ebe2-0af8-5478-a6c3-d8e7a4a270f2",
+      "name": "Enrich Problem",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1000,
+        1450
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item, i) => {\n  const q = (item.json.data && item.json.data.question) || {};\n  const src = $('Filter Recent Solves').all()[i].json;\n  return { json: {\n    profile_id: src.profile_id,\n    slug: src.titleSlug,\n    title: src.title,\n    difficulty: q.difficulty || 'Unknown',\n    topics: (q.topicTags || []).map(t => t.name),\n    solved_at: new Date(Number(src.timestamp) * 1000).toISOString()\n  } };\n});"
+      },
+      "id": "3871bd5b-22a2-541c-93c8-e7ae8a93523a",
+      "name": "Shape History Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1250,
+        1450
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH prob AS (\n  INSERT INTO problems (slug, title, difficulty, url, topics, patterns, updated_at)\n  VALUES ($2, $3, $4, 'https://leetcode.com/problems/' || $2 || '/', $5::jsonb, derive_patterns($2, $5::jsonb, '[]'::jsonb), now())\n  ON CONFLICT (slug) DO UPDATE SET\n    difficulty = COALESCE(NULLIF(EXCLUDED.difficulty, 'Unknown'), problems.difficulty),\n    topics = EXCLUDED.topics, updated_at = now()\n  RETURNING id, slug, title, difficulty\n), ins AS (\n  INSERT INTO attempts (profile_id, problem_id, problem_slug, problem_title, difficulty, attempt_number,\n    started_at, submitted_at, result, hints_used, solution_viewed, editorial_viewed, performance, source)\n  SELECT $1::uuid, prob.id, prob.slug, prob.title, prob.difficulty,\n    (SELECT count(*) + 1 FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = prob.slug),\n    $6::timestamptz, $6::timestamptz, 'accepted', 0, false, false, 'assisted', 'leetcode_sync'\n  FROM prob\n  WHERE NOT EXISTS (\n    SELECT 1 FROM attempts a\n    WHERE a.profile_id = $1::uuid AND a.problem_slug = prob.slug\n      AND abs(extract(epoch FROM (a.submitted_at - $6::timestamptz))) < 21600)\n  RETURNING id\n), pf AS (\n  UPDATE profiles SET last_synced_at = now() WHERE id = $1::uuid RETURNING id\n)\nSELECT prob.slug, (SELECT count(*) FROM ins) AS imported FROM prob;",
+        "options": {
+          "queryReplacement": "={{ [ $json.profile_id, $json.slug, $json.title, $json.difficulty, JSON.stringify($json.topics), $json.solved_at ] }}"
+        }
+      },
+      "id": "57cc2aee-6972-5239-95b2-6ff945e5f394",
+      "name": "Import Attempt",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1500,
+        1450
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ids = [...new Set($('Shape History Row').all().map(i => i.json.profile_id))];\nreturn ids.map(id => ({ json: { profile_id: id, patterns: [], _source: 'recalc' } }));"
+      },
+      "id": "2e381a15-20c8-5dd4-9aee-b48bb5325495",
+      "name": "Prep Recalc",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1750,
+        1450
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4. Cold start (already-started students)\nPOST /webhook/dsa-coach/cold-start with profile + self_ratings per topic (1-5).\nRatings become a weak PRIOR only; real attempts replace it. Then the LeetCode import runs immediately.",
+        "height": 150,
+        "width": 900,
+        "color": 2
+      },
+      "id": "b706bf3e-200d-5cf7-9c07-d97c6760c680",
+      "name": "Note: ## 4. Cold start (already-started studen",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        1630
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dsa-coach/cold-start",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "b3513075-444a-5fbf-be06-c5ec8c18dd14",
+      "name": "Cold Start Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        1800
+      ],
+      "webhookId": "58433298-927a-5851-9814-854ed90ab8f0"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst b = raw.body ?? raw;\nconst uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nconst ratings = {};\nfor (const [k, v] of Object.entries(b.self_ratings || {})) { const n = Number(v); if (n >= 1 && n <= 5) ratings[k] = n; }\nreturn [{ json: {\n  profile_id: uuid.test(String(b.profile_id || '')) ? b.profile_id : '',\n  name: String(b.name || 'Me'), email: String(b.email || ''),\n  leetcode_username: String(b.leetcode_username || ''),\n  target_company: String(b.target_company || ''), target_role: String(b.target_role || 'SWE'),\n  target_date: /^\\d{4}-\\d{2}-\\d{2}$/.test(String(b.target_date || '')) ? b.target_date : '',\n  hours_per_week: Number(b.hours_per_week) || 7, daily_minutes: Number(b.daily_minutes) || 0,\n  level: String(b.level || 'Intermediate'),\n  target_sets: Array.isArray(b.target_sets) && b.target_sets.length ? b.target_sets.map(String) : ['starter'],\n  self_ratings: ratings\n} }];"
+      },
+      "id": "da1e1872-f121-5d3b-9430-9b0104ed7a8f",
+      "name": "Validate Cold Start",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        250,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH pf AS (\n  INSERT INTO profiles (id, name, email, leetcode_username, target_company, target_role, target_date,\n    hours_per_week, daily_minutes, level, target_sets)\n  VALUES (COALESCE(NULLIF($1::text, '')::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, NULLIF($7::text, '')::date,\n    $8::numeric, $9::int, $10, $11::text[])\n  ON CONFLICT (id) DO UPDATE SET\n    name = EXCLUDED.name, email = EXCLUDED.email, leetcode_username = EXCLUDED.leetcode_username,\n    target_company = EXCLUDED.target_company, target_role = EXCLUDED.target_role, target_date = EXCLUDED.target_date,\n    hours_per_week = EXCLUDED.hours_per_week, daily_minutes = EXCLUDED.daily_minutes, level = EXCLUDED.level,\n    target_sets = EXCLUDED.target_sets\n  RETURNING id\n), rt AS (\n  SELECT key AS topic, (value #>> '{}')::numeric AS rating,\n    LEAST(0.6, ((value #>> '{}')::numeric - 1) / 4 * 0.6) AS prior\n  FROM jsonb_each($12::jsonb)\n), pri AS (\n  INSERT INTO skills (profile_id, pattern_id, mastery, prior_mastery, confidence, problems_attempted)\n  SELECT pf.id, p.id, rt.prior, rt.prior, rt.rating, 0\n  FROM pf CROSS JOIN patterns p JOIN rt ON lower(rt.topic) = lower(p.topic)\n  ON CONFLICT (profile_id, pattern_id) DO UPDATE SET\n    prior_mastery = EXCLUDED.prior_mastery,\n    mastery = CASE WHEN skills.problems_attempted > 0 THEN skills.mastery ELSE EXCLUDED.mastery END\n  RETURNING 1\n)\nSELECT pf.id AS profile_id, (SELECT count(*) FROM pri) AS priors_saved FROM pf;",
+        "options": {
+          "queryReplacement": "={{ [ $json.profile_id, $json.name, $json.email, $json.leetcode_username, $json.target_company, $json.target_role, $json.target_date, $json.hours_per_week, $json.daily_minutes, $json.level, $json.target_sets, JSON.stringify($json.self_ratings) ] }}"
+        }
+      },
+      "id": "0b5fd7a1-4fcc-554d-836d-285de4db0ffc",
+      "name": "Save Profile And Priors",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        500,
+        1800
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, profile_id: $json.profile_id, priors_saved: $json.priors_saved, next: 'Keep this profile_id in the extension. LeetCode import is running; POST /webhook/dsa-coach/plan for today.' } }}",
+        "options": {}
+      },
+      "id": "5b3592c8-9318-5c74-b312-f292f7fb3814",
+      "name": "Return Cold Start",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        750,
+        1740
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 5. Weekly report (Sunday 8 PM)",
+        "height": 70,
+        "width": 500,
+        "color": 6
+      },
+      "id": "756763fa-b587-5871-a2ed-a2be40ea4bbd",
+      "name": "Note: ## 5. Weekly report (Sunday 8 PM)",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        2060
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                0
+              ],
+              "triggerAtHour": 20
+            }
+          ]
+        }
+      },
+      "id": "49ec55a4-93ae-573e-9387-31d44444d55a",
+      "name": "Every Sunday 8PM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        2150
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH pf AS (SELECT * FROM profiles ORDER BY created_at LIMIT 1),\nwk AS (\n  SELECT a.* FROM attempts a JOIN pf ON a.profile_id = pf.id\n  WHERE a.submitted_at >= now() - interval '7 days'\n)\nSELECT\n  (SELECT to_jsonb(pf) FROM pf) AS profile,\n  (SELECT count(DISTINCT problem_slug) FROM wk) AS problems,\n  (SELECT count(DISTINCT problem_slug) FROM wk WHERE performance = 'strong') AS independent,\n  (SELECT count(DISTINCT problem_slug) FROM wk WHERE performance = 'assisted' AND COALESCE(hints_used, 0) > 0\n     AND NOT COALESCE(solution_viewed, false) AND NOT COALESCE(editorial_viewed, false)) AS hint_dependent,\n  (SELECT count(DISTINCT problem_slug) FROM wk WHERE COALESCE(solution_viewed, false) OR COALESCE(editorial_viewed, false)) AS solution_dependent,\n  (SELECT e FROM (SELECT jsonb_array_elements_text(error_types) AS e FROM wk WHERE jsonb_typeof(error_types) = 'array') x\n     GROUP BY e ORDER BY count(*) DESC LIMIT 1) AS top_error,\n  (SELECT count(DISTINCT r.pattern_id) FROM reviews r JOIN pf ON r.profile_id = pf.id\n     WHERE r.completed_at >= now() - interval '7 days') AS patterns_reviewed,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(s)), '[]'::jsonb) FROM (\n     SELECT p.name, p.topic, p.weight, COALESCE(sk.mastery, 0) AS mastery, COALESCE(sk.problems_attempted, 0) AS attempted, sk.last_practiced\n     FROM patterns p LEFT JOIN skills sk ON sk.pattern_id = p.id AND sk.profile_id = (SELECT id FROM pf)) s) AS patterns;",
+        "options": {}
+      },
+      "id": "2a9b7183-cddf-59db-8346-0d395ea02b59",
+      "name": "Load Weekly Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        250,
+        2150
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "bxT1ZL8cTIlKF9uM",
+          "name": "Postgres account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nif (!d.profile) throw new Error('No profile found');\nconst pats = d.patterns || [];\nconst groups = {};\npats.forEach(p => { (groups[p.topic] = groups[p.topic] || []).push(p); });\nconst avg = ps => ps.reduce((s, p) => s + Number(p.mastery), 0) / ps.length;\nconst topics = Object.entries(groups).map(([t, ps]) => ({ t, avg: avg(ps), attempted: ps.some(p => Number(p.attempted) > 0), w: Math.max(...ps.map(p => Number(p.weight))) }));\nconst practiced = topics.filter(x => x.attempted).sort((a, b) => b.avg - a.avg);\nconst core = topics.filter(x => x.w >= 0.6).sort((a, b) => a.avg - b.avg);\nconst attention = pats.filter(p => Number(p.weight) >= 0.6 && Number(p.mastery) < 0.4)\n  .sort((a, b) => Number(b.weight) * (0.8 - Number(b.mastery)) - Number(a.weight) * (0.8 - Number(a.mastery))).slice(0, 5);\nconst focus = core.slice(0, 3).map(x => x.t);\nconst li = s => '<li>' + s + '</li>';\nconst html = '<div style=\"font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;\"><h2>Weekly DSA report</h2><ul>'\n  + li('Problems: <b>' + d.problems + '</b>')\n  + li('Independent: <b>' + d.independent + '</b> &middot; Hint-dependent: <b>' + d.hint_dependent + '</b> &middot; Solution-dependent: <b>' + d.solution_dependent + '</b>')\n  + li('Strongest topic: <b>' + (practiced[0] ? practiced[0].t : 'n/a yet') + '</b>')\n  + li('Weakest core topic: <b>' + (core[0] ? core[0].t : 'n/a') + '</b>')\n  + li('Most common error: <b>' + (d.top_error || 'none logged') + '</b>')\n  + li('Patterns reviewed: <b>' + d.patterns_reviewed + '</b>')\n  + li('Patterns needing attention: <b>' + (attention.length ? attention.map(p => p.name).join(', ') : 'none') + '</b>')\n  + li('Next week: <b>' + (focus.join(' + ') || 'keep going') + '</b>')\n  + '</ul></div>';\nreturn [{ json: { email: d.profile.email, subject: 'DSA Coach - weekly report', html } }];"
+      },
+      "id": "ae6126fb-eac8-53fa-8033-0725da0b7efb",
+      "name": "Build Weekly Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        2150
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "a0f1ef10-a6cc-5395-8c82-f1468d2c516a",
+      "name": "Email Weekly Report",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        750,
+        2150
+      ],
+      "webhookId": "18f7b593-9969-5d20-949c-0cb59174d778",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "juN4KqhMrHsjtJ3U",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "DSA Coach Event Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Event": {
+      "main": [
+        [
+          {
+            "node": "Route Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Event": {
+      "main": [
+        [
+          {
+            "node": "Upsert Problem",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Close Session",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save Reflection",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Hint Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Problem": {
+      "main": [
+        [
+          {
+            "node": "Create Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Session": {
+      "main": [
+        [
+          {
+            "node": "Get Skill Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Skill Context": {
+      "main": [
+        [
+          {
+            "node": "Build Problem Started Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Attempt": {
+      "main": [
+        [
+          {
+            "node": "Load Skill Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Reflection": {
+      "main": [
+        [
+          {
+            "node": "Load Skill Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Skill Inputs": {
+      "main": [
+        [
+          {
+            "node": "Compute Skill Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Skill Update": {
+      "main": [
+        [
+          {
+            "node": "Upsert Skill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Skill": {
+      "main": [
+        [
+          {
+            "node": "Live Event?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Live Event?": {
+      "main": [
+        [
+          {
+            "node": "Build Submission Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Hint Context": {
+      "main": [
+        [
+          {
+            "node": "Build Hint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Hint": {
+      "main": [
+        [
+          {
+            "node": "Needs AI?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs AI?": {
+      "main": [
+        [
+          {
+            "node": "Explain With AI",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finalize Hint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Explain With AI": {
+      "main": [
+        [
+          {
+            "node": "Finalize Hint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Problem Started Response": {
+      "main": [
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close Session": {
+      "main": [
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Submission Response": {
+      "main": [
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Hint": {
+      "main": [
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Morning 7AM": {
+      "main": [
+        [
+          {
+            "node": "Resolve Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Webhook": {
+      "main": [
+        [
+          {
+            "node": "Resolve Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Profile": {
+      "main": [
+        [
+          {
+            "node": "Load Planning Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Planning Data": {
+      "main": [
+        [
+          {
+            "node": "Priority Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Priority Engine": {
+      "main": [
+        [
+          {
+            "node": "Save Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Plan": {
+      "main": [
+        [
+          {
+            "node": "Requested Via Webhook?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requested Via Webhook?": {
+      "main": [
+        [
+          {
+            "node": "Return Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Plan Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Plan Email": {
+      "main": [
+        [
+          {
+            "node": "Email Daily Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Night 3AM": {
+      "main": [
+        [
+          {
+            "node": "Get Sync Profiles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sync Profiles": {
+      "main": [
+        [
+          {
+            "node": "Fetch Recent Solves",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Recent Solves": {
+      "main": [
+        [
+          {
+            "node": "Filter Recent Solves",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Recent Solves": {
+      "main": [
+        [
+          {
+            "node": "Enrich Problem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich Problem": {
+      "main": [
+        [
+          {
+            "node": "Shape History Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape History Row": {
+      "main": [
+        [
+          {
+            "node": "Import Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Import Attempt": {
+      "main": [
+        [
+          {
+            "node": "Prep Recalc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Recalc": {
+      "main": [
+        [
+          {
+            "node": "Load Skill Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cold Start Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Cold Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Cold Start": {
+      "main": [
+        [
+          {
+            "node": "Save Profile And Priors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Profile And Priors": {
+      "main": [
+        [
+          {
+            "node": "Return Cold Start",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Sync Profiles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Sunday 8PM": {
+      "main": [
+        [
+          {
+            "node": "Load Weekly Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Weekly Stats": {
+      "main": [
+        [
+          {
+            "node": "Build Weekly Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Weekly Report": {
+      "main": [
+        [
+          {
+            "node": "Email Weekly Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata"
+  },
+  "meta": {
+    "instanceId": "851977c54b9213d64406c50d0d70cc9300c1e87a95925bb1568cb8ba815be4a0"
+  }
+}

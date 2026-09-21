@@ -1,0 +1,54 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 400px;
+  min-width: 360px;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}
+
+/* Monospace for timer */
+.font-mono {
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+/* Prevent text selection on interactive elements */
+button, nav {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Smooth transitions everywhere */
+* {
+  transition-property: background-color, border-color, color, opacity;
+  transition-timing-function: ease;
+  transition-duration: 150ms;
+}
+
+/* Override for transform transitions (need explicit) */
+.transition-all {
+  transition-property: all;
+}

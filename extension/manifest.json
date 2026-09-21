@@ -1,0 +1,35 @@
+{
+  "name": "DSA Coach",
+  "version": "1.0.0",
+  "description": "Your personal DSA coaching assistant for LeetCode. Powered by n8n + Supabase.",
+  "manifest_version": 3,
+  "background": {
+    "service_worker": "src/background.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.leetcode.com/problems/*"],
+      "js": ["src/content.ts"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Open DSA Coach"
+  },
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "activeTab",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "*://*.leetcode.com/*",
+    "http://localhost/*",
+    "https://*/*"
+  ]
+}
