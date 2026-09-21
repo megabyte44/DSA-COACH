@@ -1,17 +1,28 @@
 import { useEffect, useState } from 'react';
-import type { Settings } from '../../types';
-import { getSettings, saveSettings } from '../services/storage';
+import type { Settings } from '../types';
+import { getSettings, saveSettings, DEFAULT_N8N_URL, DEFAULT_SETTINGS } from '../services/storage';
 
-const DEFAULT_N8N = 'https://punithnaidu2006.app.n8n.cloud/webhook-test/dsa-coach/event';
+interface Props {
+  onRedoOnboarding: () => void;
+}
 
-export function SettingsView() {
-  const [settings, setSettings] = useState<Settings>({
-    n8nUrl: DEFAULT_N8N,
-    profile_id: 'default',
-    daily_goal_minutes: 60,
-    notifications_enabled: true,
-  });
+/** Ask for host permission on the custom n8n origin (manifest ships only a
+ * scoped default + localhost — a non-default host needs an explicit grant). */
+async function ensureHostPermission(url: string): Promise<boolean> {
+  try {
+    const origin = new URL(url).origin + '/*';
+    const has = await chrome.permissions.contains({ origins: [origin] });
+    if (has) return true;
+    return await chrome.permissions.request({ origins: [origin] });
+  } catch {
+    return false;
+  }
+}
+
+export function SettingsView({ onRedoOnboarding }: Props) {
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
+  const [permissionDenied, setPermissionDenied] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,6 +33,12 @@ export function SettingsView() {
   }, []);
 
   const handleSave = async () => {
+    setPermissionDenied(false);
+    const granted = await ensureHostPermission(settings.n8nUrl);
+    if (!granted) {
+      setPermissionDenied(true);
+      return;
+    }
     await saveSettings(settings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -41,19 +58,24 @@ export function SettingsView() {
         {/* n8n URL */}
         <div className="p-4 border-b border-slate-700/50">
           <label className="text-xs text-slate-400 uppercase tracking-wider font-bold block mb-2">
-            n8n Webhook URL
+            n8n Event Webhook URL
           </label>
           <input
             id="n8n-url-input"
             type="url"
             value={settings.n8nUrl}
             onChange={e => setSettings(s => ({ ...s, n8nUrl: e.target.value }))}
-            placeholder={DEFAULT_N8N}
+            placeholder={DEFAULT_N8N_URL}
             className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-indigo-500 transition-colors font-mono"
           />
           <p className="text-[10px] text-slate-600 mt-1">
-            All events are sent to this webhook endpoint
+            Ends in /dsa-coach/event — the Plan and Cold Start webhooks are derived from this URL automatically.
           </p>
+          {permissionDenied && (
+            <p className="text-[10px] text-red-400 mt-1">
+              Chrome didn't grant permission for that URL's host — settings not saved.
+            </p>
+          )}
         </div>
 
         {/* Profile ID */}
@@ -69,6 +91,7 @@ export function SettingsView() {
             placeholder="default"
             className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 outline-none focus:border-indigo-500 transition-colors"
           />
+          <p className="text-[10px] text-slate-600 mt-1">Set automatically when you complete onboarding.</p>
         </div>
 
         {/* Daily Goal */}
@@ -97,7 +120,7 @@ export function SettingsView() {
         <div className="p-4 flex items-center justify-between">
           <div>
             <p className="text-sm text-slate-300 font-medium">Notifications</p>
-            <p className="text-[10px] text-slate-500">Reminders and session alerts</p>
+            <p className="text-[10px] text-slate-500">Not wired up yet — saved but has no effect</p>
           </div>
           <button
             id="notifications-toggle"
@@ -128,15 +151,18 @@ export function SettingsView() {
 
       {/* Reset */}
       <button
-        onClick={() => setSettings({
-          n8nUrl: DEFAULT_N8N,
-          profile_id: 'default',
-          daily_goal_minutes: 60,
-          notifications_enabled: true,
-        })}
+        onClick={() => setSettings(s => ({ ...DEFAULT_SETTINGS, onboarded: s.onboarded }))}
         className="text-xs text-slate-600 hover:text-slate-400 text-center transition-colors"
       >
         Reset to defaults
+      </button>
+
+      <button
+        id="redo-onboarding-btn"
+        onClick={onRedoOnboarding}
+        className="text-xs text-slate-600 hover:text-slate-400 text-center transition-colors"
+      >
+        Redo onboarding
       </button>
 
       <p className="text-center text-[10px] text-slate-700 pb-1">

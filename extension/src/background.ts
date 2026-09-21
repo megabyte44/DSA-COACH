@@ -1,6 +1,6 @@
-import { sendEvent, retryPendingEvents } from './services/n8n';
-import { getSession, setSession, clearSession } from './services/storage';
-import type { Problem, ReflectionPayload } from './types';
+import { sendEvent, retryPendingEvents, submitColdStart } from './services/n8n';
+import { getSession, setSession, clearSession, saveSettings, getSettings, setPlanItemDone } from './services/storage';
+import type { Problem, ReflectionPayload, ColdStartPayload } from './types';
 
 // ─── Side Panel behaviour ──────────────────────────────────────────────────────
 chrome.sidePanel
@@ -31,6 +31,7 @@ async function handleMessage(message: any) {
       await setSession({
         currentProblem: problem,
         session_id: null,
+        attempt_id: null,
         coachMessage: null,
         coachPattern: null,
         skillMastery: null,
@@ -53,44 +54,51 @@ async function handleMessage(message: any) {
         await setSession({
           session_id: response.session_id || null,
           coachMessage: response.coach?.message || null,
-          coachPattern: response.coach?.pattern || null,
-          skillMastery: response.skill?.mastery ?? null,
-          skillConfidence: response.skill?.confidence ?? null,
-          lastPracticed: (response as any).skill?.last_practiced || null,
+          coachPattern: response.coach?.likely_pattern || null,
+          skillMastery: response.coach?.patterns?.[0]?.mastery_pct ?? null,
+          lastPracticed: response.coach?.patterns?.[0]?.days_since != null
+            ? `${response.coach.patterns[0].days_since} days ago`
+            : null,
           isTyping: false,
+          backendUnavailable: false,
         });
       } else {
-        await setSession({ isTyping: false });
+        await setSession({ isTyping: false, backendUnavailable: true });
       }
 
       return { success: true };
     }
 
-    // ── Hint request from side panel ─────────────────────────────────────────
-    case 'HINT_REQUEST': {
+    // ── Coach request from side panel (hint / approach / reveal solution) ─────
+    case 'COACH_REQUEST': {
       const session = await getSession();
+      const { request_type, confirm_solution } = message.payload as {
+        request_type: 'hint' | 'approach' | 'solution';
+        confirm_solution?: boolean;
+      };
       await setSession({ isTyping: true });
 
-      const response = await sendEvent('hint_request', {
+      const nextLevel = request_type === 'hint' ? session.hintLevel + 1 : undefined;
+
+      const response = await sendEvent('coach_requested', {
         session_id: session.session_id,
         problem_slug: session.currentProblem?.slug,
-        hint_level: session.hintLevel,
+        request_type,
+        hint_level: nextLevel,
+        hints_used: session.hintLevel,
+        confirm_solution: confirm_solution === true,
       });
 
-      const newLevel = session.hintLevel + 1;
       if (response) {
-        const hintMsg =
-          response.hint?.message ||
-          response.coach?.message ||
-          null;
+        const hintMsg = response.coach?.hint || null;
         await setSession({
           isTyping: false,
-          hintLevel: newLevel,
+          hintLevel: response.hint_level ?? nextLevel ?? session.hintLevel,
           hintMessage: hintMsg,
-          coachMessage: hintMsg,
+          coachMessage: hintMsg || session.coachMessage,
         });
       } else {
-        await setSession({ isTyping: false, hintLevel: newLevel });
+        await setSession({ isTyping: false });
       }
       return { success: true };
     }
@@ -98,10 +106,10 @@ async function handleMessage(message: any) {
     // ── Submission detected by content script ─────────────────────────────────
     case 'SUBMISSION': {
       const session = await getSession();
-      const { slug, result, elapsed_seconds } = message.payload as {
+      const { slug, result, duration_seconds } = message.payload as {
         slug: string;
         result: string;
-        elapsed_seconds: number;
+        duration_seconds: number;
       };
 
       await setSession({ isTyping: true, timerState: 'SUBMITTED', status: 'submitted' });
@@ -110,17 +118,17 @@ async function handleMessage(message: any) {
         session_id: session.session_id,
         problem_slug: slug,
         result,
-        elapsed_seconds,
+        duration_seconds,
       });
 
       if (response) {
-        const feedbackMsg =
-          response.feedback?.message || response.coach?.message || null;
-        const feedbackType = response.feedback?.type || (result === 'accepted' ? 'success' : 'warning');
+        const feedbackMsg = response.coach?.message || null;
+        const feedbackType = response.result === 'accepted' || result === 'accepted' ? 'success' : 'warning';
         await setSession({
           isTyping: false,
+          attempt_id: response.attempt_id || session.attempt_id,
           feedbackMessage: feedbackMsg,
-          feedbackType: feedbackType as any,
+          feedbackType,
         });
       } else {
         await setSession({ isTyping: false });
@@ -131,12 +139,24 @@ async function handleMessage(message: any) {
     // ── Reflection submitted from side panel ──────────────────────────────────
     case 'REFLECTION': {
       const session = await getSession();
+      if (!session.attempt_id) {
+        return { success: false, error: 'No attempt to reflect on yet — submit a solution first.' };
+      }
       const payload = message.payload as ReflectionPayload;
 
       await sendEvent('reflection', {
         session_id: session.session_id,
+        attempt_id: session.attempt_id,
         problem_slug: session.currentProblem?.slug,
-        ...payload,
+        confidence: payload.confidence,
+        hints_used: payload.hints_used,
+        solution_viewed: payload.solution_viewed,
+        error_types: payload.error_types,
+        reflection: {
+          notes: payload.reflection,
+          how_it_went: payload.how_it_went,
+          main_difficulty: payload.main_difficulty,
+        },
       });
 
       await setSession({ timerState: 'COMPLETED', status: 'completed' });
@@ -146,18 +166,50 @@ async function handleMessage(message: any) {
     // ── Session closed (tab closed / navigated away) ───────────────────────────
     case 'SESSION_CLOSED': {
       const session = await getSession();
-      if (session.currentProblem) {
+      if (session.currentProblem && session.session_id) {
         const timerStartedAt = session.timerStartedAt || Date.now();
         const elapsed = Math.floor((Date.now() - timerStartedAt) / 1000) + session.elapsedOnPause;
 
-        await sendEvent('session_closed', {
+        await sendEvent('session_end', {
           session_id: session.session_id,
-          problem_slug: session.currentProblem.slug,
-          elapsed_seconds: elapsed,
+          duration_seconds: elapsed,
         });
       }
       await clearSession();
       return { success: true };
+    }
+
+    // ── Local-only timer pause/resume ──────────────────────────────────────────
+    case 'PAUSE_TIMER': {
+      const session = await getSession();
+      if (session.timerState !== 'STARTED' && session.timerState !== 'RESUMED') {
+        return { success: false, error: 'Timer is not running' };
+      }
+      const startedAt = session.timerStartedAt || Date.now();
+      const elapsedOnPause = Math.floor((Date.now() - startedAt) / 1000) + session.elapsedOnPause;
+      await setSession({ timerState: 'PAUSED', timerStartedAt: null, elapsedOnPause });
+      return { success: true };
+    }
+
+    case 'RESUME_TIMER': {
+      const session = await getSession();
+      if (session.timerState !== 'PAUSED') {
+        return { success: false, error: 'Timer is not paused' };
+      }
+      await setSession({ timerState: 'RESUMED', timerStartedAt: Date.now() });
+      return { success: true };
+    }
+
+    // ── Cold-start onboarding ───────────────────────────────────────────────────
+    case 'COLD_START': {
+      const payload = message.payload as ColdStartPayload;
+      const response = await submitColdStart(payload);
+      if (!response?.profile_id) {
+        return { success: false, error: 'Could not reach the coach backend. Check your n8n URL in Settings.' };
+      }
+      const settings = await getSettings();
+      await saveSettings({ ...settings, profile_id: response.profile_id, onboarded: true });
+      return { success: true, profile_id: response.profile_id, priors_saved: response.priors_saved };
     }
 
     // ── Load daily plan ────────────────────────────────────────────────────────
@@ -172,6 +224,13 @@ async function handleMessage(message: any) {
       const { fetchProgress } = await import('./services/n8n');
       const skills = await fetchProgress();
       return { success: true, skills };
+    }
+
+    // ── Mark a plan item done/undone (local only — n8n has no per-item update) ─
+    case 'PLAN_ITEM_COMPLETE': {
+      const { plan_date, order, done } = message.payload as { plan_date: string; order: number; done: boolean };
+      await setPlanItemDone(plan_date, order, done);
+      return { success: true };
     }
 
     default:

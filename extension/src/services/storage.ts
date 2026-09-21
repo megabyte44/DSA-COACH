@@ -1,16 +1,20 @@
 import type { SessionState, Settings, PendingEvent } from '../types';
 
 // ─── Default Values ────────────────────────────────────────────────────────────
+export const DEFAULT_N8N_URL = 'https://YOUR-N8N-HOST/webhook/dsa-coach/event';
+
 export const DEFAULT_SETTINGS: Settings = {
-  n8nUrl: 'https://punithnaidu2006.app.n8n.cloud/webhook-test/dsa-coach/event',
+  n8nUrl: DEFAULT_N8N_URL,
   profile_id: 'default',
   daily_goal_minutes: 60,
   notifications_enabled: true,
+  onboarded: false,
 };
 
 export const DEFAULT_SESSION: SessionState = {
   currentProblem: null,
   session_id: null,
+  attempt_id: null,
   coachMessage: null,
   coachPattern: null,
   skillMastery: null,
@@ -25,6 +29,7 @@ export const DEFAULT_SESSION: SessionState = {
   elapsedOnPause: 0,
   timerState: 'IDLE',
   status: 'idle',
+  backendUnavailable: false,
 };
 
 // ─── Session ──────────────────────────────────────────────────────────────────
@@ -79,4 +84,20 @@ export async function incrementRetry(id: string): Promise<void> {
   const pending = await getPendingEvents();
   const updated = pending.map(e => e.id === id ? { ...e, retries: e.retries + 1 } : e);
   await chrome.storage.local.set({ pendingEvents: updated });
+}
+
+// ─── Local plan-item completion (n8n's `plans` rows have no per-item state) ────
+export async function getPlanCompletions(plan_date: string): Promise<number[]> {
+  const result = await chrome.storage.local.get('planCompletions');
+  const all = (result.planCompletions as Record<string, number[]>) || {};
+  return all[plan_date] || [];
+}
+
+export async function setPlanItemDone(plan_date: string, order: number, done: boolean): Promise<void> {
+  const result = await chrome.storage.local.get('planCompletions');
+  const all = (result.planCompletions as Record<string, number[]>) || {};
+  const current = new Set(all[plan_date] || []);
+  if (done) current.add(order); else current.delete(order);
+  all[plan_date] = Array.from(current);
+  await chrome.storage.local.set({ planCompletions: all });
 }

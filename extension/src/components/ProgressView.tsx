@@ -1,17 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { SkillProgress } from '../../types';
-
-// ─── Mock data so the view always shows something useful even if n8n is unavailable ─
-const MOCK_SKILLS: SkillProgress[] = [
-  { pattern: 'Arrays / Hash Map', topic: 'Arrays', mastery: 78 },
-  { pattern: 'Two Pointers', topic: 'Arrays', mastery: 64 },
-  { pattern: 'Sliding Window', topic: 'Arrays', mastery: 43 },
-  { pattern: 'Binary Search', topic: 'Search', mastery: 55 },
-  { pattern: 'Tree DFS/BFS', topic: 'Trees', mastery: 61 },
-  { pattern: 'Graph BFS/DFS', topic: 'Graphs', mastery: 38 },
-  { pattern: 'Dynamic Programming', topic: 'DP', mastery: 29 },
-  { pattern: 'Backtracking', topic: 'Recursion', mastery: 35 },
-];
+import type { SkillProgress } from '../types';
 
 function getMasteryColor(m: number): string {
   if (m >= 70) return '#34d399';
@@ -30,14 +18,15 @@ function getMasteryLabel(m: number): string {
 export function ProgressView() {
   const [skills, setSkills] = useState<SkillProgress[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     chrome.runtime.sendMessage({ type: 'PROGRESS_REQUEST' }, (res) => {
       setLoading(false);
-      if (res?.success && res.skills?.length) {
+      if (res?.success && Array.isArray(res.skills)) {
         setSkills(res.skills);
       } else {
-        setSkills(MOCK_SKILLS); // Fall back to mock
+        setFailed(true);
       }
     });
   }, []);
@@ -50,13 +39,32 @@ export function ProgressView() {
     );
   }
 
-  const skillList = skills || MOCK_SKILLS;
-  const avgMastery = skillList.length
-    ? Math.round(skillList.reduce((s, k) => s + k.mastery, 0) / skillList.length)
-    : 0;
+  if (failed || !skills) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6">
+        <span className="text-4xl">📡</span>
+        <p className="text-slate-400 text-sm text-center">
+          Couldn't load your progress.<br />Check your n8n connection in Settings.
+        </p>
+      </div>
+    );
+  }
+
+  if (skills.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6">
+        <span className="text-4xl">🌱</span>
+        <p className="text-slate-400 text-sm text-center">
+          No data yet — solve a problem or complete onboarding to start building your skill profile.
+        </p>
+      </div>
+    );
+  }
+
+  const avgMastery = Math.round(skills.reduce((s, k) => s + k.mastery, 0) / skills.length);
 
   // Group by topic
-  const groups = skillList.reduce<Record<string, SkillProgress[]>>((acc, s) => {
+  const groups = skills.reduce<Record<string, SkillProgress[]>>((acc, s) => {
     const key = s.topic || 'General';
     if (!acc[key]) acc[key] = [];
     acc[key].push(s);
@@ -83,7 +91,7 @@ export function ProgressView() {
             </div>
           </div>
         </div>
-        <p className="text-xs text-slate-400">{skillList.length} patterns tracked</p>
+        <p className="text-xs text-slate-400">{skills.length} patterns tracked</p>
       </div>
 
       {/* By group */}
@@ -104,7 +112,7 @@ export function ProgressView() {
                       <span className="text-[10px] font-semibold" style={{ color }}>
                         {getMasteryLabel(pct)}
                       </span>
-                      <span className="text-xs font-bold tabular-nums" style={{ color }}>{pct}%</span>
+                      <span className="text-xs font-bold tabular-nums" style={{ color }}>{Math.round(pct)}%</span>
                     </div>
                   </div>
                   <div className="h-1.5 rounded-full bg-slate-700 overflow-hidden">
@@ -124,7 +132,7 @@ export function ProgressView() {
       ))}
 
       <p className="text-center text-[10px] text-slate-600 pb-2">
-        Data from Supabase via n8n · {skills === MOCK_SKILLS ? 'Preview data' : 'Live'}
+        Data from Supabase via n8n
       </p>
     </div>
   );

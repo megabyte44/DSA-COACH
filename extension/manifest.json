@@ -24,12 +24,13 @@
     "sidePanel",
     "storage",
     "activeTab",
-    "scripting",
     "alarms"
   ],
   "host_permissions": [
     "*://*.leetcode.com/*",
-    "http://localhost/*",
+    "http://localhost/*"
+  ],
+  "optional_host_permissions": [
     "https://*/*"
   ]
 }

@@ -1,12 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
 import './index.css';
-import type { SessionState, ReflectionPayload } from './types';
-import { DEFAULT_SESSION } from './services/storage';
+import type { SessionState, ReflectionPayload, Settings } from './types';
+import { DEFAULT_SESSION, DEFAULT_SETTINGS } from './services/storage';
 import { CoachView } from './components/CoachView';
 import { ReflectionView } from './components/ReflectionView';
 import { PlanView } from './components/PlanView';
 import { ProgressView } from './components/ProgressView';
 import { SettingsView } from './components/SettingsView';
+import { ColdStartView } from './components/ColdStartView';
 
 // ─── Nav tabs ──────────────────────────────────────────────────────────────────
 type Tab = 'coach' | 'plan' | 'progress' | 'settings';
@@ -32,18 +33,22 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('coach');
   const [isReflecting, setIsReflecting] = useState(false);
   const [session, setSession] = useState<SessionState>(DEFAULT_SESSION);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Load session from storage ────────────────────────────────────────────────
+  // ── Load session + settings from storage ─────────────────────────────────────
   useEffect(() => {
-    chrome.storage.local.get('session', (result) => {
+    chrome.storage.local.get(['session', 'settings'], (result) => {
       if (result.session) setSession(result.session as SessionState);
+      setSettings({ ...DEFAULT_SETTINGS, ...(result.settings as Partial<Settings>) });
     });
 
     const listener = (changes: Record<string, chrome.storage.StorageChange>, ns: string) => {
-      if (ns === 'local' && changes.session) {
-        setSession(changes.session.newValue as SessionState);
+      if (ns !== 'local') return;
+      if (changes.session) setSession(changes.session.newValue as SessionState);
+      if (changes.settings) {
+        setSettings({ ...DEFAULT_SETTINGS, ...(changes.settings.newValue as Partial<Settings>) });
       }
     };
     chrome.storage.onChanged.addListener(listener);
@@ -71,10 +76,16 @@ export default function App() {
   }, [session]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
-  const handleHint = () => {
+  const handleCoachRequest = (requestType: 'hint' | 'approach' | 'solution', confirmSolution?: boolean) => {
     if (session.isTyping) return;
-    chrome.runtime.sendMessage({ type: 'HINT_REQUEST' });
+    chrome.runtime.sendMessage({
+      type: 'COACH_REQUEST',
+      payload: { request_type: requestType, confirm_solution: confirmSolution },
+    });
   };
+
+  const handlePause = () => chrome.runtime.sendMessage({ type: 'PAUSE_TIMER' });
+  const handleResume = () => chrome.runtime.sendMessage({ type: 'RESUME_TIMER' });
 
   const handleReflect = () => {
     setIsReflecting(true);
@@ -89,8 +100,25 @@ export default function App() {
     setIsReflecting(false);
   };
 
+  const handleRedoOnboarding = () => {
+    if (!settings) return;
+    chrome.storage.local.set({ settings: { ...settings, onboarded: false } });
+  };
+
   // ── Connection indicator ──────────────────────────────────────────────────────
   const isConnected = session.status === 'active' || session.status === 'submitted';
+
+  if (!settings) {
+    return (
+      <div className="flex items-center justify-center w-full h-screen bg-[#0d1117]">
+        <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!settings.onboarded) {
+    return <ColdStartView />;
+  }
 
   return (
     <div className="flex flex-col w-full h-screen bg-[#0d1117] text-slate-100 select-none overflow-hidden">
@@ -119,8 +147,10 @@ export default function App() {
           <CoachView
             session={session}
             elapsed={elapsed}
-            onHint={handleHint}
+            onCoachRequest={handleCoachRequest}
             onReflect={handleReflect}
+            onPause={handlePause}
+            onResume={handleResume}
           />
         )}
         {tab === 'coach' && isReflecting && (
@@ -132,7 +162,7 @@ export default function App() {
         )}
         {tab === 'plan' && <PlanView />}
         {tab === 'progress' && <ProgressView />}
-        {tab === 'settings' && <SettingsView />}
+        {tab === 'settings' && <SettingsView onRedoOnboarding={handleRedoOnboarding} />}
       </main>
 
       {/* ── Bottom nav ──────────────────────────────────────────────────────── */}

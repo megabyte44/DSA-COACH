@@ -207,7 +207,8 @@
           "id": "bxT1ZL8cTIlKF9uM",
           "name": "Postgres account"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -230,7 +231,8 @@
           "id": "bxT1ZL8cTIlKF9uM",
           "name": "Postgres account"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -254,7 +256,8 @@
           "name": "Postgres account"
         }
       },
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -291,7 +294,8 @@
           "name": "Postgres account"
         }
       },
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -314,7 +318,8 @@
           "id": "bxT1ZL8cTIlKF9uM",
           "name": "Postgres account"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -338,7 +343,8 @@
           "name": "Postgres account"
         }
       },
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -485,7 +491,8 @@
           "name": "Postgres account"
         }
       },
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -680,7 +687,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH pf AS (\n  SELECT p.*, $2::text AS via FROM profiles p WHERE p.id = $1::uuid\n), pats AS (\n  SELECT p.name, p.topic, p.tier, p.weight, p.prerequisites, p.recognition_signals,\n    COALESCE(s.mastery, 0) AS mastery, s.prior_mastery, s.last_practiced, s.next_review,\n    COALESCE(s.problems_attempted, 0) AS attempted,\n    CASE WHEN s.last_practiced IS NULL THEN NULL ELSE floor(extract(epoch FROM (now() - s.last_practiced)) / 86400)::int END AS days_since,\n    COALESCE(s.next_review <= now(), false) AS review_due\n  FROM patterns p LEFT JOIN skills s ON s.pattern_id = p.id AND s.profile_id = $1::uuid\n), cand AS (\n  SELECT t.set_name, t.position, t.slug, t.title, t.difficulty, t.patterns, t.url,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug) AS tries,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug AND a.result = 'accepted') AS accepted_count,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug AND a.performance = 'strong') AS strong_count,\n    (SELECT max(a.submitted_at) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug) AS last_attempt_at\n  FROM target_set_problems t\n  WHERE t.set_name = ANY(COALESCE((SELECT target_sets FROM pf), ARRAY['starter']))\n)\nSELECT\n  (SELECT to_jsonb(pf) FROM pf) AS profile,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(pats)), '[]'::jsonb) FROM pats) AS patterns,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(r)), '[]'::jsonb) FROM (\n     SELECT a.difficulty, a.result, a.performance, a.hints_used, a.submitted_at, a.problem_slug\n     FROM attempts a WHERE a.profile_id = $1::uuid ORDER BY a.submitted_at DESC LIMIT 8) r) AS recent,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(cand)), '[]'::jsonb) FROM cand) AS candidates,\n  (SELECT max(submitted_at) FROM attempts WHERE profile_id = $1::uuid) AS last_attempt_at,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(pl)), '[]'::jsonb) FROM (\n     SELECT plan_date, mode, restart_step FROM plans\n     WHERE profile_id = $1::uuid AND plan_date < current_date ORDER BY plan_date DESC LIMIT 4) pl) AS recent_plans,\n  extract(dow FROM now())::int AS dow,\n  current_date::text AS today;",
+        "query": "WITH pf AS (\n  SELECT p.*, $2::text AS via FROM profiles p WHERE p.id = $1::uuid\n), pats AS (\n  SELECT p.name, p.topic, p.tier, p.weight, p.prerequisites, p.recognition_signals,\n    COALESCE(s.mastery, 0) AS mastery, s.prior_mastery, s.last_practiced, s.next_review,\n    COALESCE(s.problems_attempted, 0) AS attempted, COALESCE(s.problems_solved, 0) AS solved,\n    CASE WHEN s.last_practiced IS NULL THEN NULL ELSE floor(extract(epoch FROM (now() - s.last_practiced)) / 86400)::int END AS days_since,\n    COALESCE(s.next_review <= now(), false) AS review_due\n  FROM patterns p LEFT JOIN skills s ON s.pattern_id = p.id AND s.profile_id = $1::uuid\n), cand AS (\n  SELECT t.set_name, t.position, t.slug, t.title, t.difficulty, t.patterns, t.url,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug) AS tries,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug AND a.result = 'accepted') AS accepted_count,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug AND a.performance = 'strong') AS strong_count,\n    (SELECT max(a.submitted_at) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug) AS last_attempt_at\n  FROM target_set_problems t\n  WHERE t.set_name = ANY(COALESCE((SELECT target_sets FROM pf), ARRAY['starter']))\n)\nSELECT\n  (SELECT to_jsonb(pf) FROM pf) AS profile,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(pats)), '[]'::jsonb) FROM pats) AS patterns,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(r)), '[]'::jsonb) FROM (\n     SELECT a.difficulty, a.result, a.performance, a.hints_used, a.submitted_at, a.problem_slug\n     FROM attempts a WHERE a.profile_id = $1::uuid ORDER BY a.submitted_at DESC LIMIT 8) r) AS recent,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(cand)), '[]'::jsonb) FROM cand) AS candidates,\n  (SELECT max(submitted_at) FROM attempts WHERE profile_id = $1::uuid) AS last_attempt_at,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(pl)), '[]'::jsonb) FROM (\n     SELECT plan_date, mode, restart_step FROM plans\n     WHERE profile_id = $1::uuid AND plan_date < current_date ORDER BY plan_date DESC LIMIT 4) pl) AS recent_plans,\n  extract(dow FROM now())::int AS dow,\n  current_date::text AS today;",
         "options": {
           "queryReplacement": "={{ [ $json.profile_id, $json.via ] }}"
         }
@@ -703,7 +710,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const d = $input.first().json;\nconst pf = d.profile;\nif (!pf) throw new Error('No profile found. POST /webhook/dsa-coach/cold-start first (or insert a row into profiles).');\nconst DAY = 86400000, now = new Date();\nconst pats = d.patterns || [], cands = d.candidates || [], recent = d.recent || [];\nconst budget = Number(pf.daily_minutes) || (Number(pf.hours_per_week) ? Math.round(Number(pf.hours_per_week) * 60 / 7) : 45);\nconst gapDays = d.last_attempt_at ? Math.floor((now - new Date(d.last_attempt_at)) / DAY) : null;\nconst toTarget = pf.target_date ? Math.ceil((new Date(pf.target_date) - now) / DAY) : null;\n\n// ---- 1. coach mode -------------------------------------------------------\nlet mode = 'build', restartStep = 0;\nif (toTarget !== null) mode = toTarget <= 3 ? 'taper' : toTarget <= 14 ? 'mock' : toTarget <= 28 ? 'consolidate' : 'build';\nconst prev = (d.recent_plans || []).find(p => Number(p.restart_step) > 0);\nconst prevAge = prev ? (new Date(d.today) - new Date(prev.plan_date)) / DAY : 99;\nif (mode !== 'taper') {\n  if (gapDays !== null && gapDays >= 5) { mode = 'restart'; restartStep = 1; }\n  else if (prev && Number(prev.restart_step) === 1 && prevAge <= 2 && gapDays !== null && gapDays <= 1) { mode = 'restart'; restartStep = 2; }\n}\n\n// ---- 2. difficulty controller (recent evidence, not totals) ---------------\nconst NAMES = ['Easy', 'Medium', 'Hard'], IDX = { Easy: 0, Medium: 1, Hard: 2 };\nlet trend = 0;\nconst l4 = recent.slice(0, 4), l2 = recent.slice(0, 2);\nif (l4.length === 4 && l4.filter(r => r.performance === 'strong').length >= 3) trend = 1;\nif (l2.length === 2 && l2.every(r => r.result !== 'accepted')) trend = -1;\nconst want = p => NAMES[Math.max(0, Math.min(2, (p.m < 0.35 ? 0 : p.m < 0.7 ? 1 : 2) + trend))];\n\n// ---- 3. priority = weight x gap x forgetting ------------------------------\nconst byName = Object.fromEntries(pats.map(p => [p.name, p]));\nconst target = t => ({ A: 0.8, B: 0.65, C: 0.5 }[t] || 0.6);\nconst scored = pats.map(p => {\n  const w = Number(p.weight) || 0.5, m = Number(p.mastery) || 0;\n  const gap = Math.max(0.05, target(p.tier) - m);\n  let f = 1;\n  if (p.days_since !== null && p.days_since !== undefined) f += Math.min(1.5, p.days_since / 14);\n  if (p.review_due) f += 0.5;\n  const uncal = Number(p.attempted) === 0 && m > 0;\n  if (uncal) f += 0.3;\n  const blocked = (p.prerequisites || []).some(q => byName[q] && Number(byName[q].mastery) < 0.35);\n  let priority = w * gap * f;\n  if (blocked && mode === 'build') priority *= 0.4;\n  if (mode === 'build' && Number(p.attempted) === 0) priority *= 1.15;\n  if (mode === 'consolidate' && Number(p.attempted) > 0) priority *= 1.2;\n  if (mode === 'taper' && m < 0.5) priority *= 0.3;\n  return { ...p, w, m, gap, f, uncal, blocked, priority };\n}).sort((a, b) => b.priority - a.priority);\n\n// ---- 4. problem picking from curated target sets -------------------------\nconst used = new Set();\nconst kind = c => Number(c.accepted_count) > 0 ? (Number(c.strong_count) > 0 ? 'mastered' : 'assisted') : (Number(c.tries) > 0 ? 'failed' : 'new');\nconst ageDays = c => c.last_attempt_at ? (now - new Date(c.last_attempt_at)) / DAY : 0;\nconst pick = (name, diff, kinds) => {\n  const fit = c => 1 - 0.5 * Math.abs((IDX[c.difficulty] ?? 1) - IDX[diff]) + (kind(c) === 'failed' ? 0.3 : 0)\n    + (kind(c) === 'assisted' ? Math.min(ageDays(c), 30) * 0.01 : 0) - Number(c.position) * 0.001;\n  const c = cands.filter(x => (x.patterns || []).includes(name) && !used.has(x.slug) && kinds.includes(kind(x))).sort((a, b) => fit(b) - fit(a))[0];\n  if (c) used.add(c.slug);\n  return c || null;\n};\nconst prob = c => c ? { slug: c.slug, title: c.title, difficulty: c.difficulty, url: c.url } : null;\nconst mins = dif => dif === 'Easy' ? 15 : dif === 'Medium' ? 25 : 35;\nconst why = p => 'weight ' + p.w.toFixed(2) + ' x gap ' + p.gap.toFixed(2) + ' x forgetting ' + p.f.toFixed(2)\n  + (p.review_due ? ', review due' : '') + (p.uncal ? ', self-rating not verified yet' : '')\n  + (p.blocked && mode === 'build' ? ', prerequisite still weak' : '');\nconst newItem = (p, type, w) => {\n  const dif = w || want(p);\n  const c = pick(p.name, dif, ['failed', 'new']) || pick(p.name, dif, ['assisted']);\n  const d2 = c ? c.difficulty : dif;\n  return { type: p.uncal && type === 'new' ? 'calibration' : type, pattern: p.name, minutes: mins(d2), difficulty: d2, problem: prob(c),\n    note: c ? null : 'No curated ' + d2 + ' problem for ' + p.name + '. Pick any ' + d2 + ' problem tagged with it.', reason: why(p) };\n};\nconst reviewItem = (p, w) => {\n  const dif = w || (p.m < 0.5 ? 'Easy' : 'Medium');\n  const c = pick(p.name, dif, ['assisted', 'failed']) || pick(p.name, dif, ['new']);\n  return { type: 'review', pattern: p.name, minutes: 15, difficulty: c ? c.difficulty : dif, problem: prob(c),\n    note: c ? null : 'No curated problem left for ' + p.name + '. Redo any problem you solved with help.', reason: why(p) };\n};\n\n// ---- 5. assemble the plan --------------------------------------------------\nlet items = [], message = '';\nconst practiced = scored.filter(p => Number(p.attempted) > 0);\nconst mockDay = mode !== 'restart' && mode !== 'taper' && d.dow === Number(pf.mock_weekday ?? 6);\nif (mode === 'restart' && restartStep === 1) {\n  const strong = practiced.slice().sort((a, b) => b.m - a.m)[0] || scored[0];\n  items = [{ ...newItem(strong, 'restart_easy', 'Easy') }];\n  message = \"Welcome back. Let's rebuild momentum. One easy win today, nothing more.\";\n} else if (mode === 'restart') {\n  const decayed = practiced.slice().sort((a, b) => (b.days_since || 0) - (a.days_since || 0)).slice(0, 2);\n  while (decayed.length < 2 && scored[decayed.length]) decayed.push(scored[decayed.length]);\n  items = decayed.map(p => ({ ...reviewItem(p), type: 'decay_review' }));\n  message = 'Good to see you back. Two problems from the patterns that faded the most, then we return to the normal load.';\n} else if (mode === 'taper') {\n  const light = practiced.filter(p => p.m >= 0.4).sort((a, b) => b.f - a.f).slice(0, 3);\n  items = (light.length ? light : practiced.slice(0, 2)).map(p => reviewItem(p, 'Easy'));\n  message = 'Taper: light review only, no new topics. Sleep matters more than one more problem.';\n} else if (mockDay) {\n  const a = scored[0], b2 = scored[1] || scored[0];\n  const hardOk = b2.m >= 0.6 && trend >= 0;\n  items = [{ ...newItem(a, 'mock', 'Medium'), minutes: 22, timed: true }, { ...newItem(b2, 'mock', hardOk ? 'Hard' : 'Medium'), minutes: 23, timed: true }];\n  message = 'Weekly mock: 45 minutes, two problems, no hints. After each one, say the pattern and complexity out loud.';\n} else {\n  const pool = mode === 'consolidate' && practiced.length ? practiced : scored;\n  const P1 = pool[0], P2 = pool.find(p => p !== P1);\n  const R = scored.filter(p => Number(p.attempted) > 0 && (p.review_due || (p.days_since || 0) >= 7) && p !== P1 && p !== P2)\n    .sort((a, b) => b.f * b.w - a.f * a.w)[0];\n  const comps = [newItem(P1, 'new')];\n  if (R) comps.push(reviewItem(R));\n  if (P1.m < 0.6) comps.push({ type: 'recognition', pattern: P1.name, minutes: 5, detail: P1.recognition_signals, reason: 'Recognition is the real skill for ' + P1.name });\n  comps.push({ type: 'explain', pattern: P1.name, minutes: 10, detail: \"For today's main problem, state the pattern, why it fits, time and space complexity.\", reason: 'Interview communication' });\n  if (P2) comps.push(newItem(P2, 'new'));\n  let used2 = 0;\n  const chosen = [];\n  comps.forEach((c, i) => { if (i === 0 || used2 + c.minutes <= budget) { chosen.push(c); used2 += c.minutes; } });\n  const order = { recognition: 0, new: 1, calibration: 1, review: 2, explain: 3 };\n  let seenMain = 0;\n  chosen.sort((a, b) => (order[a.type] ?? 1) - (order[b.type] ?? 1));\n  items = chosen.map(c => mode === 'mock' && c.problem ? { ...c, timed: true } : c);\n  message = mode[0].toUpperCase() + mode.slice(1) + ' mode' + (toTarget !== null ? ' - ' + toTarget + ' days to target' : '') + '. Top focus: ' + P1.name + '.'\n    + (trend === -1 ? ' Recent attempts were rough, so difficulty is lowered and this pattern is reviewed first.' : trend === 1 ? ' You are on a strong run, so difficulty steps up.' : '');\n}\nconst plan = {\n  plan_date: d.today, mode, restart_step: restartStep, days_to_target: toTarget, budget_minutes: budget,\n  total_minutes: items.reduce((s, x) => s + x.minutes, 0), message, difficulty_trend: trend,\n  items: items.map((x, i) => ({ order: i + 1, ...x })),\n  priorities: scored.slice(0, 6).map(p => ({ pattern: p.name, tier: p.tier, mastery: Number(p.m.toFixed(2)), priority: Number(p.priority.toFixed(3)), days_since: p.days_since, review_due: p.review_due }))\n};\nreturn [{ json: { profile_id: pf.id, email: pf.email, via: pf.via, plan } }];"
+        "jsCode": "const d = $input.first().json;\nconst pf = d.profile;\nif (!pf) throw new Error('No profile found. POST /webhook/dsa-coach/cold-start first (or insert a row into profiles).');\nconst DAY = 86400000, now = new Date();\nconst pats = d.patterns || [], cands = d.candidates || [], recent = d.recent || [];\nconst budget = Number(pf.daily_minutes) || (Number(pf.hours_per_week) ? Math.round(Number(pf.hours_per_week) * 60 / 7) : 45);\nconst gapDays = d.last_attempt_at ? Math.floor((now - new Date(d.last_attempt_at)) / DAY) : null;\nconst toTarget = pf.target_date ? Math.ceil((new Date(pf.target_date) - now) / DAY) : null;\n\n// ---- 1. coach mode -------------------------------------------------------\nlet mode = 'build', restartStep = 0;\nif (toTarget !== null) mode = toTarget <= 3 ? 'taper' : toTarget <= 14 ? 'mock' : toTarget <= 28 ? 'consolidate' : 'build';\nconst prev = (d.recent_plans || []).find(p => Number(p.restart_step) > 0);\nconst prevAge = prev ? (new Date(d.today) - new Date(prev.plan_date)) / DAY : 99;\nif (mode !== 'taper') {\n  if (gapDays !== null && gapDays >= 5) { mode = 'restart'; restartStep = 1; }\n  else if (prev && Number(prev.restart_step) === 1 && prevAge <= 2 && gapDays !== null && gapDays <= 1) { mode = 'restart'; restartStep = 2; }\n}\n\n// ---- 2. difficulty controller (recent evidence, not totals) ---------------\nconst NAMES = ['Easy', 'Medium', 'Hard'], IDX = { Easy: 0, Medium: 1, Hard: 2 };\nlet trend = 0;\nconst l4 = recent.slice(0, 4), l2 = recent.slice(0, 2);\nif (l4.length === 4 && l4.filter(r => r.performance === 'strong').length >= 3) trend = 1;\nif (l2.length === 2 && l2.every(r => r.result !== 'accepted')) trend = -1;\nconst want = p => NAMES[Math.max(0, Math.min(2, (p.m < 0.35 ? 0 : p.m < 0.7 ? 1 : 2) + trend))];\n\n// ---- 3. priority = weight x gap x forgetting ------------------------------\nconst byName = Object.fromEntries(pats.map(p => [p.name, p]));\nconst target = t => ({ A: 0.8, B: 0.65, C: 0.5 }[t] || 0.6);\nconst scored = pats.map(p => {\n  const w = Number(p.weight) || 0.5, m = Number(p.mastery) || 0;\n  const gap = Math.max(0.05, target(p.tier) - m);\n  let f = 1;\n  if (p.days_since !== null && p.days_since !== undefined) f += Math.min(1.5, p.days_since / 14);\n  if (p.review_due) f += 0.5;\n  const uncal = Number(p.attempted) === 0 && m > 0;\n  if (uncal) f += 0.3;\n  const blocked = (p.prerequisites || []).some(q => byName[q] && Number(byName[q].mastery) < 0.35);\n  let priority = w * gap * f;\n  if (blocked && mode === 'build') priority *= 0.4;\n  if (mode === 'build' && Number(p.attempted) === 0) priority *= 1.15;\n  if (mode === 'consolidate' && Number(p.attempted) > 0) priority *= 1.2;\n  if (mode === 'taper' && m < 0.5) priority *= 0.3;\n  return { ...p, w, m, gap, f, uncal, blocked, priority };\n}).sort((a, b) => b.priority - a.priority);\n\n// ---- 4. problem picking from curated target sets -------------------------\nconst used = new Set();\nconst kind = c => Number(c.accepted_count) > 0 ? (Number(c.strong_count) > 0 ? 'mastered' : 'assisted') : (Number(c.tries) > 0 ? 'failed' : 'new');\nconst ageDays = c => c.last_attempt_at ? (now - new Date(c.last_attempt_at)) / DAY : 0;\nconst pick = (name, diff, kinds) => {\n  const fit = c => 1 - 0.5 * Math.abs((IDX[c.difficulty] ?? 1) - IDX[diff]) + (kind(c) === 'failed' ? 0.3 : 0)\n    + (kind(c) === 'assisted' ? Math.min(ageDays(c), 30) * 0.01 : 0) - Number(c.position) * 0.001;\n  const c = cands.filter(x => (x.patterns || []).includes(name) && !used.has(x.slug) && kinds.includes(kind(x))).sort((a, b) => fit(b) - fit(a))[0];\n  if (c) used.add(c.slug);\n  return c || null;\n};\nconst prob = c => c ? { slug: c.slug, title: c.title, difficulty: c.difficulty, url: c.url } : null;\nconst mins = dif => dif === 'Easy' ? 15 : dif === 'Medium' ? 25 : 35;\nconst why = p => 'weight ' + p.w.toFixed(2) + ' x gap ' + p.gap.toFixed(2) + ' x forgetting ' + p.f.toFixed(2)\n  + (p.review_due ? ', review due' : '') + (p.uncal ? ', self-rating not verified yet' : '')\n  + (p.blocked && mode === 'build' ? ', prerequisite still weak' : '');\nconst newItem = (p, type, w) => {\n  const dif = w || want(p);\n  const c = pick(p.name, dif, ['failed', 'new']) || pick(p.name, dif, ['assisted']);\n  const d2 = c ? c.difficulty : dif;\n  return { type: p.uncal && type === 'new' ? 'calibration' : type, pattern: p.name, minutes: mins(d2), difficulty: d2, problem: prob(c),\n    note: c ? null : 'No curated ' + d2 + ' problem for ' + p.name + '. Pick any ' + d2 + ' problem tagged with it.', reason: why(p) };\n};\nconst reviewItem = (p, w) => {\n  const dif = w || (p.m < 0.5 ? 'Easy' : 'Medium');\n  const c = pick(p.name, dif, ['assisted', 'failed']) || pick(p.name, dif, ['new']);\n  return { type: 'review', pattern: p.name, minutes: 15, difficulty: c ? c.difficulty : dif, problem: prob(c),\n    note: c ? null : 'No curated problem left for ' + p.name + '. Redo any problem you solved with help.', reason: why(p) };\n};\n\n// ---- 5. assemble the plan --------------------------------------------------\nlet items = [], message = '';\nconst practiced = scored.filter(p => Number(p.attempted) > 0);\nconst mockDay = mode !== 'restart' && mode !== 'taper' && d.dow === Number(pf.mock_weekday ?? 6);\nif (mode === 'restart' && restartStep === 1) {\n  const strong = practiced.slice().sort((a, b) => b.m - a.m)[0] || scored[0];\n  items = [{ ...newItem(strong, 'restart_easy', 'Easy') }];\n  message = \"Welcome back. Let's rebuild momentum. One easy win today, nothing more.\";\n} else if (mode === 'restart') {\n  const decayed = practiced.slice().sort((a, b) => (b.days_since || 0) - (a.days_since || 0)).slice(0, 2);\n  while (decayed.length < 2 && scored[decayed.length]) decayed.push(scored[decayed.length]);\n  items = decayed.map(p => ({ ...reviewItem(p), type: 'decay_review' }));\n  message = 'Good to see you back. Two problems from the patterns that faded the most, then we return to the normal load.';\n} else if (mode === 'taper') {\n  const light = practiced.filter(p => p.m >= 0.4).sort((a, b) => b.f - a.f).slice(0, 3);\n  items = (light.length ? light : practiced.slice(0, 2)).map(p => reviewItem(p, 'Easy'));\n  message = 'Taper: light review only, no new topics. Sleep matters more than one more problem.';\n} else if (mockDay) {\n  const a = scored[0], b2 = scored[1] || scored[0];\n  const hardOk = b2.m >= 0.6 && trend >= 0;\n  items = [{ ...newItem(a, 'mock', 'Medium'), minutes: 22, timed: true }, { ...newItem(b2, 'mock', hardOk ? 'Hard' : 'Medium'), minutes: 23, timed: true }];\n  message = 'Weekly mock: 45 minutes, two problems, no hints. After each one, say the pattern and complexity out loud.';\n} else {\n  const pool = mode === 'consolidate' && practiced.length ? practiced : scored;\n  const P1 = pool[0], P2 = pool.find(p => p !== P1);\n  const R = scored.filter(p => Number(p.attempted) > 0 && (p.review_due || (p.days_since || 0) >= 7) && p !== P1 && p !== P2)\n    .sort((a, b) => b.f * b.w - a.f * a.w)[0];\n  const comps = [newItem(P1, 'new')];\n  if (R) comps.push(reviewItem(R));\n  if (P1.m < 0.6) comps.push({ type: 'recognition', pattern: P1.name, minutes: 5, detail: P1.recognition_signals, reason: 'Recognition is the real skill for ' + P1.name });\n  comps.push({ type: 'explain', pattern: P1.name, minutes: 10, detail: \"For today's main problem, state the pattern, why it fits, time and space complexity.\", reason: 'Interview communication' });\n  if (P2) comps.push(newItem(P2, 'new'));\n  let used2 = 0;\n  const chosen = [];\n  comps.forEach((c, i) => { if (i === 0 || used2 + c.minutes <= budget) { chosen.push(c); used2 += c.minutes; } });\n  const order = { recognition: 0, new: 1, calibration: 1, review: 2, explain: 3 };\n  let seenMain = 0;\n  chosen.sort((a, b) => (order[a.type] ?? 1) - (order[b.type] ?? 1));\n  items = chosen.map(c => mode === 'mock' && c.problem ? { ...c, timed: true } : c);\n  message = mode[0].toUpperCase() + mode.slice(1) + ' mode' + (toTarget !== null ? ' - ' + toTarget + ' days to target' : '') + '. Top focus: ' + P1.name + '.'\n    + (trend === -1 ? ' Recent attempts were rough, so difficulty is lowered and this pattern is reviewed first.' : trend === 1 ? ' You are on a strong run, so difficulty steps up.' : '');\n}\nconst plan = {\n  plan_date: d.today, mode, restart_step: restartStep, days_to_target: toTarget, budget_minutes: budget,\n  total_minutes: items.reduce((s, x) => s + x.minutes, 0), message, difficulty_trend: trend,\n  items: items.map((x, i) => ({ order: i + 1, ...x })),\n  priorities: scored.slice(0, 6).map(p => ({ pattern: p.name, tier: p.tier, mastery: Number(p.m.toFixed(2)), priority: Number(p.priority.toFixed(3)), days_since: p.days_since, review_due: p.review_due })),\n  skills: scored.map(p => ({ pattern: p.name, topic: p.topic, mastery: Math.round(p.m * 100), problems_solved: p.solved, last_practiced: p.last_practiced }))\n};\nreturn [{ json: { profile_id: pf.id, email: pf.email, via: pf.via, plan } }];"
       },
       "id": "50873421-cfdb-5e0d-b24b-a9901334f25b",
       "name": "Priority Engine",
@@ -1080,7 +1087,8 @@
           "id": "bxT1ZL8cTIlKF9uM",
           "name": "Postgres account"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -1193,6 +1201,32 @@
           "name": "Gmail account"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "const err = ($input.first().json && $input.first().json.error) || {};\nreturn [{ json: { success: false, error: 'backend_temporarily_unavailable', detail: String(err.message || err.description || err || 'unknown') } }];"
+      },
+      "id": "f3a1c9e2-7b4d-5a6e-9c1f-2d8e6b4a0c11",
+      "name": "Event Error Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1750,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const err = ($input.first().json && $input.first().json.error) || {};\nreturn [{ json: { success: false, error: 'backend_temporarily_unavailable', detail: String(err.message || err.description || err || 'unknown') } }];"
+      },
+      "id": "f3a1c9e2-7b4d-5a6e-9c1f-2d8e6b4a0c12",
+      "name": "Cold Start Error Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        1950
+      ]
     }
   ],
   "connections": {
@@ -1265,6 +1299,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Event Error Response",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -1273,6 +1314,13 @@
         [
           {
             "node": "Get Skill Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Event Error Response",
             "type": "main",
             "index": 0
           }
@@ -1287,6 +1335,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Event Error Response",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -1298,6 +1353,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Event Error Response",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -1306,6 +1368,13 @@
         [
           {
             "node": "Load Skill Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Event Error Response",
             "type": "main",
             "index": 0
           }
@@ -1361,6 +1430,13 @@
         [
           {
             "node": "Build Hint",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Event Error Response",
             "type": "main",
             "index": 0
           }
@@ -1423,6 +1499,13 @@
         [
           {
             "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Event Error Response",
             "type": "main",
             "index": 0
           }
@@ -1666,6 +1749,35 @@
           },
           {
             "node": "Get Sync Profiles",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cold Start Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Event Error Response": {
+      "main": [
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cold Start Error Response": {
+      "main": [
+        [
+          {
+            "node": "Return Cold Start",
             "type": "main",
             "index": 0
           }
