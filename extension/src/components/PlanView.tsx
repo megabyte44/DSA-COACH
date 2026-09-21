@@ -81,7 +81,7 @@ export function PlanView() {
   const donePct = plan.items.length ? Math.round((completed / plan.items.length) * 100) : 0;
 
   return (
-    <div className="flex flex-col gap-2.5 p-3">
+    <div className="flex flex-col gap-2.5 px-4 py-3">
       <Card>
         <CardBody className="pt-4">
           <div className="mb-3 flex items-start justify-between">

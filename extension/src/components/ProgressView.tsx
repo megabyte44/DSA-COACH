@@ -58,7 +58,7 @@ export function ProgressView() {
   );
 
   return (
-    <div className="flex flex-col gap-2.5 p-3">
+    <div className="flex flex-col gap-2.5 px-4 py-3">
       <Card>
         <CardBody className="pt-4">
           <div className="mb-3 flex items-end justify-between">

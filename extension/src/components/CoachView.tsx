@@ -63,7 +63,7 @@ export function CoachView({ session, elapsed, onCoachRequest, onReflect, onPause
   const tone = skillMastery !== null ? masteryTone(skillMastery) : null;
 
   return (
-    <div className="flex flex-col gap-2.5 p-3">
+    <div className="flex flex-col gap-2.5 px-4 py-3">
       {backendUnavailable && (
         <Notice tone="warning" icon={AlertTriangle} title="Coach offline">
           Your session is still being tracked and will sync when the connection returns.

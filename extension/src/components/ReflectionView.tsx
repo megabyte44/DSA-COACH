@@ -73,7 +73,7 @@ export function ReflectionView({ session, onSubmit, onCancel }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-2.5 p-3">
+    <div className="flex flex-col gap-2.5 px-4 py-3">
       <div className="px-1">
         <h2 className="text-[15px] font-bold tracking-tight">How did it go?</h2>
         <p className="mt-0.5 text-xs text-subtle">This is what tunes tomorrow's plan.</p>

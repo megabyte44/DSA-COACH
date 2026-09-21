@@ -32,12 +32,16 @@
   padding: 0;
 }
 
+/* The Chrome side panel is user-resizable — it is never exactly 400px, so the
+ * app must fill whatever width Chrome actually gives it, not dictate one. A
+ * fixed width here left a stray unstyled gap when the panel was wider than
+ * that, which is what read as lopsided/cramped padding. */
 html,
 body,
 #root {
   height: 100%;
-  width: 400px;
-  min-width: 360px;
+  width: 100%;
+  min-width: 320px;
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);

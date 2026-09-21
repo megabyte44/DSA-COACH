@@ -62,7 +62,7 @@ export function SettingsView({ onRedoOnboarding }: Props) {
   const testOk = testResult?.startsWith('Connected');
 
   return (
-    <div className="flex flex-col gap-2.5 p-3">
+    <div className="flex flex-col gap-2.5 px-4 py-3">
       <Card>
         <CardHeader title="Connection" icon={<Plug className="h-3 w-3" />} />
         <CardBody className="flex flex-col gap-3 pt-1">

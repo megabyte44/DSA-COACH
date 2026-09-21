@@ -72,7 +72,7 @@ export function ColdStartView() {
         </div>
       </header>
 
-      <div className="flex flex-col gap-2.5 p-3">
+      <div className="flex flex-col gap-2.5 px-4 py-3">
         <Card>
           <CardHeader title="About you" icon={<User className="h-3 w-3" />} />
           <CardBody className="flex flex-col gap-3 pt-1">
