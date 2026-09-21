@@ -1,19 +1,24 @@
 import { useEffect, useState } from 'react';
+import { Plug, Check, RotateCcw, UserCog, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import type { Settings } from '../types';
 import { getSettings, saveSettings, DEFAULT_N8N_URL, DEFAULT_SETTINGS } from '../services/storage';
 import { testConnection } from '../services/n8n';
+import { Button } from './ui/button';
+import { Card, CardBody, CardHeader } from './ui/card';
+import { Field, Input, Slider, Switch } from './ui/field';
+import { Loading } from './ui/state';
+import { cn } from '../lib/utils';
 
 interface Props {
   onRedoOnboarding: () => void;
 }
 
-/** Ask for host permission on the custom n8n origin (manifest ships only a
- * scoped default + localhost — a non-default host needs an explicit grant). */
+/** A non-default endpoint needs its own host grant; the manifest only ships
+ * LeetCode, n8n.cloud and localhost. */
 async function ensureHostPermission(url: string): Promise<boolean> {
   try {
     const origin = new URL(url).origin + '/*';
-    const has = await chrome.permissions.contains({ origins: [origin] });
-    if (has) return true;
+    if (await chrome.permissions.contains({ origins: [origin] })) return true;
     return await chrome.permissions.request({ origins: [origin] });
   } catch {
     return false;
@@ -37,11 +42,7 @@ export function SettingsView({ onRedoOnboarding }: Props) {
 
   const handleSave = async () => {
     setPermissionDenied(false);
-    const granted = await ensureHostPermission(settings.n8nUrl);
-    if (!granted) {
-      setPermissionDenied(true);
-      return;
-    }
+    if (!(await ensureHostPermission(settings.n8nUrl))) return setPermissionDenied(true);
     await saveSettings(settings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -55,148 +56,123 @@ export function SettingsView({ onRedoOnboarding }: Props) {
     setTesting(false);
   };
 
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return <Loading />;
+
+  const isTestUrl = settings.n8nUrl.includes('/webhook-test/');
+  const testOk = testResult?.startsWith('Connected');
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="bg-slate-800/80 rounded-xl border border-slate-700/60 overflow-hidden">
-        {/* n8n URL */}
-        <div className="p-4 border-b border-slate-700/50">
-          <label className="text-xs text-slate-400 uppercase tracking-wider font-bold block mb-2">
-            n8n Event Webhook URL
-          </label>
-          <input
-            id="n8n-url-input"
-            type="url"
-            value={settings.n8nUrl}
-            onChange={e => setSettings(s => ({ ...s, n8nUrl: e.target.value }))}
-            placeholder={DEFAULT_N8N_URL}
-            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-indigo-500 transition-colors font-mono"
-          />
-          <p className="text-[10px] text-slate-600 mt-1">
-            Ends in /dsa-coach/event — the Plan and Cold Start webhooks are derived from this URL automatically.
-          </p>
-          {permissionDenied && (
-            <p className="text-[10px] text-red-400 mt-1">
-              Chrome didn't grant permission for that URL's host — settings not saved.
-            </p>
-          )}
-          {settings.n8nUrl.includes('/webhook-test/') && (
-            <p className="text-[10px] text-amber-400 mt-1">
-              This is a test URL. n8n only answers it for one call right after you click
-              "Execute workflow" in the editor — use the /webhook/ path for normal use.
-            </p>
-          )}
-          <button
-            id="test-connection-btn"
-            onClick={handleTest}
-            disabled={testing}
-            className="mt-2 w-full py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-40 text-xs font-semibold transition-all"
+    <div className="flex flex-col gap-2.5 p-3">
+      <Card>
+        <CardHeader title="Connection" icon={<Plug className="h-3 w-3" />} />
+        <CardBody className="flex flex-col gap-3 pt-1">
+          <Field
+            label="n8n event webhook"
+            hint="Ends in /dsa-coach/event — the plan and cold-start endpoints are derived from it."
           >
+            <Input
+              type="url"
+              value={settings.n8nUrl}
+              onChange={e => setSettings(s => ({ ...s, n8nUrl: e.target.value }))}
+              placeholder={DEFAULT_N8N_URL}
+              className="font-mono text-[11px]"
+            />
+          </Field>
+
+          {isTestUrl && (
+            <div className="flex gap-2 rounded-lg border border-warning/25 bg-warning/10 p-2.5">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+              <p className="text-[10px] leading-relaxed text-warning/90">
+                This is a test URL. n8n answers it once, right after you click “Execute workflow”.
+                Use the <span className="font-mono">/webhook/</span> path for normal use.
+              </p>
+            </div>
+          )}
+
+          <Button variant="secondary" size="sm" block disabled={testing} onClick={handleTest}>
+            {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug className="h-3.5 w-3.5" />}
             {testing ? 'Testing…' : 'Test connection'}
-          </button>
+          </Button>
+
           {testResult && (
-            <p className={`text-[10px] mt-1.5 leading-relaxed ${testResult.startsWith('Connected') ? 'text-emerald-400' : 'text-amber-400'}`}>
-              {testResult}
+            <div className={cn(
+              'flex gap-2 rounded-lg border p-2.5',
+              testOk ? 'border-success/25 bg-success/10' : 'border-warning/25 bg-warning/10',
+            )}>
+              {testOk
+                ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+                : <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />}
+              <p className={cn('text-[10px] leading-relaxed', testOk ? 'text-success/90' : 'text-warning/90')}>
+                {testResult}
+              </p>
+            </div>
+          )}
+
+          {permissionDenied && (
+            <p className="text-[10px] text-danger">
+              Chrome didn't grant permission for that host — settings not saved.
             </p>
           )}
-        </div>
+        </CardBody>
+      </Card>
 
-        {/* Profile ID */}
-        <div className="p-4 border-b border-slate-700/50">
-          <label className="text-xs text-slate-400 uppercase tracking-wider font-bold block mb-2">
-            Profile ID
-          </label>
-          <input
-            id="profile-id-input"
-            type="text"
-            value={settings.profile_id}
-            onChange={e => setSettings(s => ({ ...s, profile_id: e.target.value }))}
-            placeholder="default"
-            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 outline-none focus:border-indigo-500 transition-colors"
-          />
-          <p className="text-[10px] text-slate-600 mt-1">Set automatically when you complete onboarding.</p>
-        </div>
+      <Card>
+        <CardHeader title="Profile" icon={<UserCog className="h-3 w-3" />} />
+        <CardBody className="flex flex-col gap-3 pt-1">
+          <Field label="Profile ID" hint="Set automatically when you complete onboarding.">
+            <Input
+              value={settings.profile_id}
+              onChange={e => setSettings(s => ({ ...s, profile_id: e.target.value }))}
+              className="font-mono text-[11px]"
+            />
+          </Field>
 
-        {/* Daily Goal */}
-        <div className="p-4 border-b border-slate-700/50">
-          <label className="text-xs text-slate-400 uppercase tracking-wider font-bold block mb-2">
-            Daily Goal (minutes)
-          </label>
-          <div className="flex items-center gap-3">
-            <input
-              id="goal-minutes-input"
-              type="range"
+          <Field label={`Daily goal · ${settings.daily_goal_minutes} min`}>
+            <Slider
+              value={settings.daily_goal_minutes}
+              onValueChange={v => setSettings(s => ({ ...s, daily_goal_minutes: v }))}
               min={15}
               max={180}
               step={15}
-              value={settings.daily_goal_minutes}
-              onChange={e => setSettings(s => ({ ...s, daily_goal_minutes: Number(e.target.value) }))}
-              className="flex-1 accent-indigo-500"
             />
-            <span className="text-indigo-400 font-bold text-sm w-12 text-right">
-              {settings.daily_goal_minutes}m
-            </span>
-          </div>
-        </div>
+          </Field>
 
-        {/* Notifications */}
-        <div className="p-4 flex items-center justify-between">
-          <div>
-            <p className="text-sm text-slate-300 font-medium">Notifications</p>
-            <p className="text-[10px] text-slate-500">Not wired up yet — saved but has no effect</p>
+          <div className="flex items-center justify-between border-t border-border-subtle pt-3">
+            <div>
+              <p className="text-[13px] font-medium text-foreground">Notifications</p>
+              <p className="text-[10px] text-faint">Saved, but not wired up yet</p>
+            </div>
+            <Switch
+              checked={settings.notifications_enabled}
+              onCheckedChange={v => setSettings(s => ({ ...s, notifications_enabled: v }))}
+            />
           </div>
-          <button
-            id="notifications-toggle"
-            onClick={() => setSettings(s => ({ ...s, notifications_enabled: !s.notifications_enabled }))}
-            className={`relative w-10 h-6 rounded-full transition-all ${
-              settings.notifications_enabled ? 'bg-indigo-600' : 'bg-slate-700'
-            }`}
-          >
-            <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${
-              settings.notifications_enabled ? 'left-5' : 'left-1'
-            }`} />
-          </button>
-        </div>
+        </CardBody>
+      </Card>
+
+      <Button block variant={saved ? 'secondary' : 'primary'} onClick={handleSave}>
+        {saved ? <Check className="h-3.5 w-3.5 text-success" /> : null}
+        {saved ? 'Saved' : 'Save settings'}
+      </Button>
+
+      <div className="flex gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="flex-1"
+          onClick={() => setSettings(s => ({ ...DEFAULT_SETTINGS, onboarded: s.onboarded }))}
+        >
+          <RotateCcw className="h-3 w-3" />
+          Reset
+        </Button>
+        <Button variant="ghost" size="sm" className="flex-1" onClick={onRedoOnboarding}>
+          <UserCog className="h-3 w-3" />
+          Redo onboarding
+        </Button>
       </div>
 
-      {/* Save */}
-      <button
-        id="save-settings-btn"
-        onClick={handleSave}
-        className={`w-full py-3 rounded-xl font-bold text-sm transition-all shadow-lg ${
-          saved
-            ? 'bg-emerald-600 text-white shadow-emerald-900/30'
-            : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-900/30 active:scale-95'
-        }`}
-      >
-        {saved ? '✓ Saved!' : 'Save Settings'}
-      </button>
-
-      {/* Reset */}
-      <button
-        onClick={() => setSettings(s => ({ ...DEFAULT_SETTINGS, onboarded: s.onboarded }))}
-        className="text-xs text-slate-600 hover:text-slate-400 text-center transition-colors"
-      >
-        Reset to defaults
-      </button>
-
-      <button
-        id="redo-onboarding-btn"
-        onClick={onRedoOnboarding}
-        className="text-xs text-slate-600 hover:text-slate-400 text-center transition-colors"
-      >
-        Redo onboarding
-      </button>
-
-      <p className="text-center text-[10px] text-slate-700 pb-1">
-        DSA Coach Extension v1.0 · Secrets stay server-side
+      <p className="pb-1 text-center text-[10px] text-faint">
+        DSA Coach v1.0 · secrets stay server-side
       </p>
     </div>
   );

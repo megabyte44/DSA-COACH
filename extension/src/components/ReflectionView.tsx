@@ -1,5 +1,11 @@
 import { useState } from 'react';
+import { CheckCircle2, ArrowLeft, Send } from 'lucide-react';
 import type { ReflectionPayload, SessionState } from '../types';
+import { cn } from '../lib/utils';
+import { Button } from './ui/button';
+import { Card, CardBody, CardHeader } from './ui/card';
+import { Field, Textarea, ChoiceRow } from './ui/field';
+import { EmptyState } from './ui/state';
 
 interface Props {
   session: SessionState;
@@ -8,21 +14,21 @@ interface Props {
 }
 
 const HOW_OPTIONS = [
-  { value: 'independent', label: '✅ Solved independently', emoji: '✅' },
-  { value: 'small_hint', label: '💡 Needed a small hint', emoji: '💡' },
-  { value: 'several_hints', label: '🔦 Needed several hints', emoji: '🔦' },
-  { value: 'viewed_solution', label: '👀 Viewed the solution', emoji: '👀' },
-  { value: 'couldnt_solve', label: "❌ Couldn't solve it", emoji: '❌' },
+  { value: 'independent', label: 'Solved it on my own' },
+  { value: 'small_hint', label: 'Needed a small hint' },
+  { value: 'several_hints', label: 'Needed several hints' },
+  { value: 'viewed_solution', label: 'Viewed the solution' },
+  { value: 'couldnt_solve', label: "Couldn't solve it" },
 ];
 
 const DIFFICULTY_OPTIONS = [
-  { value: 'PATTERN_NOT_RECOGNIZED', label: "Didn't recognize pattern" },
+  { value: 'PATTERN_NOT_RECOGNIZED', label: "Didn't spot the pattern" },
   { value: 'WRONG_APPROACH', label: 'Wrong approach' },
   { value: 'IMPLEMENTATION_BUG', label: 'Implementation bug' },
-  { value: 'EDGE_CASE', label: 'Edge case miss' },
+  { value: 'EDGE_CASE', label: 'Edge case' },
   { value: 'COMPLEXITY_TLE', label: 'Complexity / TLE' },
   { value: 'TIME_PRESSURE', label: 'Time pressure' },
-  { value: 'PROBLEM_NOT_UNDERSTOOD', label: "Didn't understand problem" },
+  { value: 'PROBLEM_NOT_UNDERSTOOD', label: "Didn't understand it" },
   { value: 'OTHER', label: 'Other' },
 ];
 
@@ -33,17 +39,13 @@ export function ReflectionView({ session, onSubmit, onCancel }: Props) {
   const [reflection, setReflection] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
-  const toggleError = (val: string) => {
-    setErrorTypes(prev =>
-      prev.includes(val) ? prev.filter(e => e !== val) : [...prev, val]
-    );
-  };
+  const toggleError = (val: string) =>
+    setErrorTypes(prev => (prev.includes(val) ? prev.filter(e => e !== val) : [...prev, val]));
 
   const handleSubmit = () => {
     if (!howItWent) return;
     setSubmitted(true);
-
-    const payload: ReflectionPayload = {
+    onSubmit({
       confidence,
       how_it_went: howItWent,
       main_difficulty: errorTypes[0],
@@ -51,132 +53,110 @@ export function ReflectionView({ session, onSubmit, onCancel }: Props) {
       hints_used: session.hintLevel,
       solution_viewed: howItWent === 'viewed_solution',
       error_types: errorTypes,
-    };
-    onSubmit(payload);
+    });
   };
 
   if (submitted) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6">
-        <div className="w-16 h-16 rounded-full bg-emerald-900/40 border border-emerald-500/30 flex items-center justify-center">
-          <span className="text-2xl">🧠</span>
-        </div>
-        <div className="text-center">
-          <p className="text-emerald-400 font-bold text-lg">Reflection saved!</p>
-          <p className="text-slate-400 text-sm mt-1">Your coach has updated your skill profile.</p>
-        </div>
-        <button
-          onClick={onCancel}
-          className="text-sm px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors"
-        >
-          Back to Coach →
-        </button>
-      </div>
+      <EmptyState
+        icon={CheckCircle2}
+        title="Reflection saved"
+        description="Your skill profile has been re-scored, and tomorrow's plan will use it."
+        action={
+          <Button variant="secondary" size="sm" onClick={onCancel}>
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to coach
+          </Button>
+        }
+      />
     );
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 overflow-y-auto">
-      <h2 className="text-base font-bold text-white">How did it go?</h2>
-
-      {/* How it went */}
-      <div className="flex flex-col gap-1.5">
-        {HOW_OPTIONS.map(opt => (
-          <button
-            key={opt.value}
-            id={`how-${opt.value}`}
-            onClick={() => setHowItWent(opt.value)}
-            className={`text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ${
-              howItWent === opt.value
-                ? 'bg-indigo-600/30 border-indigo-500 text-white'
-                : 'bg-slate-800/60 border-slate-700/50 text-slate-300 hover:bg-slate-700/60'
-            }`}
-          >
-            {opt.label}
-          </button>
-        ))}
+    <div className="flex flex-col gap-2.5 p-3">
+      <div className="px-1">
+        <h2 className="text-[15px] font-bold tracking-tight">How did it go?</h2>
+        <p className="mt-0.5 text-xs text-subtle">This is what tunes tomorrow's plan.</p>
       </div>
 
-      {/* Confidence */}
-      <div>
-        <p className="text-xs text-slate-400 uppercase tracking-wider font-bold mb-2">
-          Confidence Level
-        </p>
-        <div className="flex gap-2">
-          {[1, 2, 3, 4, 5].map(n => (
-            <button
-              key={n}
-              id={`conf-${n}`}
-              onClick={() => setConfidence(n)}
-              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all border ${
-                confidence === n
-                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg'
-                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
-              }`}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-        <div className="flex justify-between text-[10px] text-slate-600 mt-1 px-1">
-          <span>Guessed</span>
-          <span>Very confident</span>
-        </div>
-      </div>
-
-      {/* Error types */}
-      <div>
-        <p className="text-xs text-slate-400 uppercase tracking-wider font-bold mb-2">
-          What was difficult? <span className="text-slate-600 normal-case">(optional)</span>
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {DIFFICULTY_OPTIONS.map(opt => (
+      <Card>
+        <CardHeader title="Outcome" />
+        <CardBody className="flex flex-col gap-1.5 pt-1">
+          {HOW_OPTIONS.map(opt => (
             <button
               key={opt.value}
-              onClick={() => toggleError(opt.value)}
-              className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
-                errorTypes.includes(opt.value)
-                  ? 'bg-amber-600/30 border-amber-500/60 text-amber-300'
-                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
-              }`}
+              onClick={() => setHowItWent(opt.value)}
+              className={cn(
+                'rounded-lg border px-3 py-2.5 text-left text-[13px] font-medium transition-all active:scale-[0.99]',
+                howItWent === opt.value
+                  ? 'border-primary bg-primary/15 text-foreground'
+                  : 'border-border-subtle bg-background text-muted hover:border-border-strong hover:text-foreground',
+              )}
             >
               {opt.label}
             </button>
           ))}
-        </div>
-      </div>
+        </CardBody>
+      </Card>
 
-      {/* Notes */}
-      <div>
-        <label className="text-xs text-slate-400 uppercase tracking-wider font-bold block mb-2">
-          What did you learn? <span className="text-slate-600 normal-case">(optional)</span>
-        </label>
-        <textarea
-          id="reflection-text"
-          value={reflection}
-          onChange={e => setReflection(e.target.value)}
-          placeholder="e.g. I didn't recognize the hash map approach…"
-          className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm text-slate-200 placeholder-slate-600 resize-none outline-none focus:border-indigo-500 transition-colors"
-          rows={3}
-        />
-      </div>
+      <Card>
+        <CardHeader title="Confidence" />
+        <CardBody className="pt-1">
+          <ChoiceRow
+            options={[1, 2, 3, 4, 5].map(n => ({ value: n, label: String(n) }))}
+            value={confidence}
+            onChange={setConfidence}
+          />
+          <div className="mt-1.5 flex justify-between text-[10px] text-faint">
+            <span>Guessed</span>
+            <span>Very confident</span>
+          </div>
+        </CardBody>
+      </Card>
 
-      {/* Actions */}
+      <Card>
+        <CardHeader title="What was hard" />
+        <CardBody className="pt-1">
+          <div className="flex flex-wrap gap-1.5">
+            {DIFFICULTY_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => toggleError(opt.value)}
+                className={cn(
+                  'rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all active:scale-95',
+                  errorTypes.includes(opt.value)
+                    ? 'border-warning/60 bg-warning/15 text-warning'
+                    : 'border-border-subtle bg-background text-subtle hover:border-border-strong hover:text-muted',
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardBody className="pt-4">
+          <Field label="What did you learn? (optional)">
+            <Textarea
+              rows={3}
+              value={reflection}
+              onChange={e => setReflection(e.target.value)}
+              placeholder="e.g. I didn't see that the window only had to shrink on invalid state…"
+            />
+          </Field>
+        </CardBody>
+      </Card>
+
       <div className="flex gap-2">
-        <button
-          onClick={onCancel}
-          className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold transition-colors"
-        >
+        <Button variant="secondary" className="flex-1" onClick={onCancel}>
           Cancel
-        </button>
-        <button
-          id="submit-reflection-btn"
-          onClick={handleSubmit}
-          disabled={!howItWent}
-          className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 active:scale-95 text-white text-sm font-bold transition-all shadow-lg shadow-indigo-900/30"
-        >
-          Submit Reflection
-        </button>
+        </Button>
+        <Button className="flex-1" disabled={!howItWent} onClick={handleSubmit}>
+          <Send className="h-3.5 w-3.5" />
+          Submit
+        </Button>
       </div>
     </div>
   );
