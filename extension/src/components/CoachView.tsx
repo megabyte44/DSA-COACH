@@ -10,6 +10,7 @@ import { Card, CardBody, CardHeader } from './ui/card';
 import { DifficultyBadge } from './ui/badge';
 import { Meter } from './ui/meter';
 import { EmptyState, Notice, StatusDot } from './ui/state';
+import { Markdown } from './ui/markdown';
 
 interface Props {
   session: SessionState;
@@ -127,14 +128,14 @@ export function CoachView({ session, elapsed, onCoachRequest, onReflect, onPause
               </span>
             </span>
           ) : (
-            coachMessage
+            <Markdown text={coachMessage || ''} />
           )}
         </Notice>
       )}
 
       {hintMessage && !coachMessage?.includes(hintMessage) && (
         <Notice tone="warning" icon={Lightbulb} title={`Hint ${hintLevel || ''}`.trim()}>
-          {hintMessage}
+          <Markdown text={hintMessage} />
         </Notice>
       )}
 
@@ -144,7 +145,7 @@ export function CoachView({ session, elapsed, onCoachRequest, onReflect, onPause
           icon={feedbackType === 'success' ? CheckCircle2 : AlertTriangle}
           title={feedbackType === 'success' ? 'Accepted' : feedbackType === 'error' ? 'Error' : 'Keep going'}
         >
-          {feedbackMessage}
+          <Markdown text={feedbackMessage} />
         </Notice>
       )}
 
