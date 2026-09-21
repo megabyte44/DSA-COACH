@@ -217,9 +217,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO sessions (profile_id, problem_id, problem_slug, started_at)\nVALUES ($1::uuid, $2, $3, COALESCE($4::timestamptz, now()))\nRETURNING id, started_at;",
+        "query": "INSERT INTO sessions (profile_id, problem_slug, started_at)\nVALUES ($1::uuid, $2, COALESCE($3::timestamptz, now()))\nRETURNING id, started_at;",
         "options": {
-          "queryReplacement": "={{ [ $('Validate Event').first().json.profile_id, $json.id, $('Validate Event').first().json.problem.slug, $('Validate Event').first().json.timestamp ] }}"
+          "queryReplacement": "={{ [ $('Validate Event').first().json.profile_id, $('Validate Event').first().json.problem.slug, $('Validate Event').first().json.timestamp ] }}"
         }
       },
       "id": "cc8ea86a-87d5-5df4-9c46-285f4f81b704",
