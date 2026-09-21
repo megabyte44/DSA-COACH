@@ -1,10 +1,13 @@
-import type { SessionState } from '../../types';
+import { useState } from 'react';
+import type { SessionState } from '../types';
 
 interface Props {
   session: SessionState;
   elapsed: number;
-  onHint: () => void;
+  onCoachRequest: (requestType: 'hint' | 'approach' | 'solution', confirmSolution?: boolean) => void;
   onReflect: () => void;
+  onPause: () => void;
+  onResume: () => void;
 }
 
 function formatTime(seconds: number): string {
@@ -36,7 +39,7 @@ function MasteryBar({ mastery }: { mastery: number }) {
     <div className="mt-2">
       <div className="flex justify-between text-[10px] text-slate-400 mb-1">
         <span>Pattern Mastery</span>
-        <span className="font-bold" style={{ color }}>{pct}%</span>
+        <span className="font-bold" style={{ color }}>{Math.round(pct)}%</span>
       </div>
       <div className="h-1.5 rounded-full bg-slate-700 overflow-hidden">
         <div
@@ -48,12 +51,15 @@ function MasteryBar({ mastery }: { mastery: number }) {
   );
 }
 
-export function CoachView({ session, elapsed, onHint, onReflect }: Props) {
+export function CoachView({ session, elapsed, onCoachRequest, onReflect, onPause, onResume }: Props) {
   const { currentProblem, coachMessage, coachPattern, skillMastery, lastPracticed,
-    feedbackMessage, feedbackType, hintMessage, isTyping, timerState, status } = session;
+    feedbackMessage, feedbackType, hintMessage, isTyping, timerState, status,
+    backendUnavailable, attempt_id } = session;
+  const [confirmingReveal, setConfirmingReveal] = useState(false);
 
   const isIdle = status === 'idle';
   const isCompleted = status === 'completed';
+  const isPaused = timerState === 'PAUSED';
 
   if (isIdle) {
     return (
@@ -77,8 +83,26 @@ export function CoachView({ session, elapsed, onHint, onReflect }: Props) {
     );
   }
 
+  const handleReveal = () => {
+    if (!confirmingReveal) {
+      setConfirmingReveal(true);
+      return;
+    }
+    setConfirmingReveal(false);
+    onCoachRequest('solution', true);
+  };
+
   return (
     <div className="flex flex-col gap-3 p-4">
+      {backendUnavailable && (
+        <div className="bg-amber-950/50 rounded-xl border border-amber-600/40 p-3">
+          <p className="text-sm text-amber-200 leading-relaxed">
+            ⚠️ Coach temporarily unavailable. Your session is still being tracked.
+            We'll sync your activity when connection returns.
+          </p>
+        </div>
+      )}
+
       {/* Problem card */}
       <div className="bg-slate-800/80 rounded-xl border border-slate-700/60 p-4 shadow-lg">
         <div className="flex items-start justify-between gap-2 mb-2">
@@ -97,7 +121,7 @@ export function CoachView({ session, elapsed, onHint, onReflect }: Props) {
           </div>
         )}
 
-        {skillMastery !== null && <MasteryBar mastery={skillMastery * 100} />}
+        {skillMastery !== null && <MasteryBar mastery={skillMastery} />}
 
         {lastPracticed && (
           <p className="text-[10px] text-slate-500 mt-2">🔄 Last practiced: {lastPracticed}</p>
@@ -178,18 +202,53 @@ export function CoachView({ session, elapsed, onHint, onReflect }: Props) {
         </div>
 
         <div className="flex flex-col gap-2">
+          {(timerState === 'STARTED' || timerState === 'RESUMED' || isPaused) && (
+            <button
+              id="pause-resume-btn"
+              onClick={isPaused ? onResume : onPause}
+              className="w-full py-2 rounded-xl bg-slate-700 hover:bg-slate-600 active:scale-95 transition-all font-semibold text-xs text-white"
+            >
+              {isPaused ? '▶ Resume' : '⏸ Pause'}
+            </button>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              id="hint-btn"
+              onClick={() => onCoachRequest('hint')}
+              disabled={isTyping || isCompleted}
+              className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 disabled:opacity-40 transition-all font-semibold text-sm text-white shadow-lg shadow-indigo-900/30"
+            >
+              💡 {session.hintLevel === 0 ? 'Hint' : `More (${session.hintLevel + 1})`}
+            </button>
+            <button
+              id="approach-btn"
+              onClick={() => onCoachRequest('approach')}
+              disabled={isTyping || isCompleted}
+              className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 active:scale-95 disabled:opacity-40 transition-all font-semibold text-sm text-white"
+            >
+              🧭 Approach
+            </button>
+          </div>
+
           <button
-            id="hint-btn"
-            onClick={onHint}
+            id="reveal-solution-btn"
+            onClick={handleReveal}
             disabled={isTyping || isCompleted}
-            className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 disabled:opacity-40 transition-all font-semibold text-sm text-white shadow-lg shadow-indigo-900/30"
+            className={`w-full py-2 rounded-xl border active:scale-95 disabled:opacity-40 transition-all font-semibold text-xs ${
+              confirmingReveal
+                ? 'bg-red-900/40 border-red-600/50 text-red-300'
+                : 'bg-transparent border-slate-700 text-slate-500 hover:text-slate-300'
+            }`}
           >
-            💡 {session.hintLevel === 0 ? 'Get a Hint' : `More Help (Level ${session.hintLevel + 1})`}
+            {confirmingReveal ? 'Tap again to reveal the full solution' : '🔓 Reveal Solution'}
           </button>
+
           <button
             id="reflect-btn"
             onClick={onReflect}
-            disabled={isCompleted}
+            disabled={isCompleted || !attempt_id}
+            title={!attempt_id ? 'Submit a solution first' : undefined}
             className="w-full py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 active:scale-95 disabled:opacity-40 transition-all font-semibold text-sm text-white"
           >
             📝 Reflect & Finish

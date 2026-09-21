@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ReflectionPayload, SessionState } from '../../types';
+import type { ReflectionPayload, SessionState } from '../types';
 
 interface Props {
   session: SessionState;

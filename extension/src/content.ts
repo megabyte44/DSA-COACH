@@ -123,7 +123,7 @@ function startSubmissionObserver() {
       const elapsed = Math.floor((Date.now() - timerStartedAt) / 1000);
       chrome.runtime.sendMessage({
         type: 'SUBMISSION',
-        payload: { slug: lastSlug, result, elapsed_seconds: elapsed },
+        payload: { slug: lastSlug, result, duration_seconds: elapsed },
       });
     }
   });
