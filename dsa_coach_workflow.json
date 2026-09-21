@@ -1264,7 +1264,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const err = ($input.first().json && $input.first().json.error) || {};\nreturn [{ json: { success: false, error: 'backend_temporarily_unavailable', detail: String(err.message || err.description || err || 'unknown') } }];"
+        "jsCode": "const err = ($input.first().json && $input.first().json.error) || {};\nconst parts = [err.message, err.description, err.detail, err.hint].filter(v => v && String(v).trim());\nconst detail = parts.length ? parts.join(' | ') : (typeof err === 'string' ? err : JSON.stringify(err)) || 'unknown';\nreturn [{ json: { success: false, error: 'backend_temporarily_unavailable', detail } }];"
       },
       "id": "f3a1c9e2-7b4d-5a6e-9c1f-2d8e6b4a0c11",
       "name": "Event Error Response",
@@ -1277,7 +1277,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const err = ($input.first().json && $input.first().json.error) || {};\nconst detail = String(err.message || err.description || err || 'unknown');\nreturn [{ json: {\n  success: false,\n  error: 'cold_start_failed',\n  detail,\n  hint: 'Open the failed execution in n8n and read the Save Profile And Priors node. Usual causes: the tables are not created yet, or profiles has a unique constraint (e.g. email) that this insert does not handle.'\n} }];"
+        "jsCode": "const err = ($input.first().json && $input.first().json.error) || {};\nconst parts = [err.message, err.description, err.detail, err.hint].filter(v => v && String(v).trim());\nconst detail = parts.length ? parts.join(' | ') : (typeof err === 'string' ? err : JSON.stringify(err)) || 'unknown';\nreturn [{ json: {\n  success: false,\n  error: 'cold_start_failed',\n  detail,\n  hint: 'Open the failed execution in n8n and read the Save Profile And Priors node. Usual causes: the tables are not created yet, or profiles has a unique constraint (e.g. email) that this insert does not handle.'\n} }];"
       },
       "id": "f3a1c9e2-7b4d-5a6e-9c1f-2d8e6b4a0c12",
       "name": "Cold Start Error Response",
@@ -1303,7 +1303,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// A database step in the shared skill engine failed. Whether anyone is waiting\n// on a response depends on how we got here: live extension events pass through\n// Validate Event, the nightly recalc does not.\nlet source = 'recalc';\ntry {\n  const ev = $('Validate Event').first().json;\n  if (ev && ev.event) source = ev.event === 'reflection' ? 'reflection' : 'submission';\n} catch (e) { /* cron recalc: no webhook is waiting */ }\nconst err = ($input.first().json && $input.first().json.error) || {};\nreturn [{ json: {\n  skip: true,\n  degraded: true,\n  source,\n  pattern: null,\n  detail: String(err.message || err.description || err || 'database unavailable')\n} }];"
+        "jsCode": "// A database step in the shared skill engine failed. Whether anyone is waiting\n// on a response depends on how we got here: live extension events pass through\n// Validate Event, the nightly recalc does not.\nlet source = 'recalc';\ntry {\n  const ev = $('Validate Event').first().json;\n  if (ev && ev.event) source = ev.event === 'reflection' ? 'reflection' : 'submission';\n} catch (e) { /* cron recalc: no webhook is waiting */ }\nconst err = ($input.first().json && $input.first().json.error) || {};\nconst parts = [err.message, err.description, err.detail].filter(v => v && String(v).trim());\nconst detail = parts.length ? parts.join(' | ') : 'database unavailable';\nreturn [{ json: {\n  skip: true,\n  degraded: true,\n  source,\n  pattern: null,\n  detail\n} }];"
       },
       "id": "c4d2a1b0-1102-5a00-9000-000000000102",
       "name": "Skill Engine Recovery",
@@ -1316,7 +1316,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Reached only when a plan query failed. The cron run has nobody to answer, so\n// work out which trigger started this execution before responding.\nlet via = 'schedule';\ntry { if ($('Plan Webhook').first().json) via = 'webhook'; } catch (e) { /* schedule run */ }\nlet plan = null;\ntry { plan = $('Priority Engine').first().json.plan || null; } catch (e) { /* failed before planning */ }\nconst err = ($input.first().json && $input.first().json.error) || {};\nconst detail = String(err.message || err.description || err || 'database unavailable');\n// If only the save failed, the plan itself is still good — hand it over rather\n// than making the user stare at an error for work already done.\nif (plan) return [{ json: { via, success: true, warning: 'plan_not_persisted', detail, plan } }];\nreturn [{ json: { via, success: false, error: 'backend_temporarily_unavailable', detail } }];"
+        "jsCode": "// Reached only when a plan query failed. The cron run has nobody to answer, so\n// work out which trigger started this execution before responding.\nlet via = 'schedule';\ntry { if ($('Plan Webhook').first().json) via = 'webhook'; } catch (e) { /* schedule run */ }\nlet plan = null;\ntry { plan = $('Priority Engine').first().json.plan || null; } catch (e) { /* failed before planning */ }\nconst err = ($input.first().json && $input.first().json.error) || {};\nconst parts = [err.message, err.description, err.detail, err.hint].filter(v => v && String(v).trim());\nconst detail = parts.length ? parts.join(' | ') : (typeof err === 'string' ? err : JSON.stringify(err)) || 'database unavailable';\n// If only the save failed, the plan itself is still good — hand it over rather\n// than making the user stare at an error for work already done.\nif (plan) return [{ json: { via, success: true, warning: 'plan_not_persisted', detail, plan } }];\nreturn [{ json: { via, success: false, error: 'backend_temporarily_unavailable', detail } }];"
       },
       "id": "c4d2a1b0-1103-5a00-9000-000000000103",
       "name": "Plan Error Response",
