@@ -32,6 +32,7 @@ export const DEFAULT_SESSION: SessionState = {
   timerState: 'IDLE',
   status: 'idle',
   backendUnavailable: false,
+  backendError: null,
 };
 
 // ─── Session ──────────────────────────────────────────────────────────────────
@@ -52,7 +53,13 @@ export async function clearSession(): Promise<void> {
 // ─── Settings ─────────────────────────────────────────────────────────────────
 export async function getSettings(): Promise<Settings> {
   const result = await chrome.storage.local.get('settings');
-  return { ...DEFAULT_SETTINGS, ...(result.settings as Partial<Settings>) };
+  const settings = { ...DEFAULT_SETTINGS, ...(result.settings as Partial<Settings>) };
+  // Saved settings shadow the default forever, so an endpoint that can never
+  // resolve would otherwise keep failing silently after the default was fixed.
+  if (!settings.n8nUrl || settings.n8nUrl.includes('YOUR-N8N-HOST')) {
+    settings.n8nUrl = DEFAULT_N8N_URL;
+  }
+  return settings;
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {

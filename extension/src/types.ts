@@ -82,6 +82,7 @@ export interface SessionState {
   timerState: TimerState;
   status: SessionStatus;
   backendUnavailable: boolean;
+  backendError: string | null;
 }
 
 // ─── Events (must match Validate Event's whitelist in dsa_coach_workflow.json) ─

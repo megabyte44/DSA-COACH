@@ -54,7 +54,7 @@ function MasteryBar({ mastery }: { mastery: number }) {
 export function CoachView({ session, elapsed, onCoachRequest, onReflect, onPause, onResume }: Props) {
   const { currentProblem, coachMessage, coachPattern, skillMastery, lastPracticed,
     feedbackMessage, feedbackType, hintMessage, isTyping, timerState, status,
-    backendUnavailable, attempt_id } = session;
+    backendUnavailable, backendError, attempt_id } = session;
   const [confirmingReveal, setConfirmingReveal] = useState(false);
 
   const isIdle = status === 'idle';
@@ -100,6 +100,9 @@ export function CoachView({ session, elapsed, onCoachRequest, onReflect, onPause
             ⚠️ Coach temporarily unavailable. Your session is still being tracked.
             We'll sync your activity when connection returns.
           </p>
+          {backendError && (
+            <p className="text-[11px] text-amber-400/80 mt-1.5 leading-relaxed break-words">{backendError}</p>
+          )}
         </div>
       )}
 

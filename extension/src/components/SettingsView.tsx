@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Settings } from '../types';
 import { getSettings, saveSettings, DEFAULT_N8N_URL, DEFAULT_SETTINGS } from '../services/storage';
+import { testConnection } from '../services/n8n';
 
 interface Props {
   onRedoOnboarding: () => void;
@@ -24,6 +25,8 @@ export function SettingsView({ onRedoOnboarding }: Props) {
   const [saved, setSaved] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
 
   useEffect(() => {
     getSettings().then(s => {
@@ -42,6 +45,14 @@ export function SettingsView({ onRedoOnboarding }: Props) {
     await saveSettings(settings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    await ensureHostPermission(settings.n8nUrl);
+    setTestResult(await testConnection(settings.n8nUrl));
+    setTesting(false);
   };
 
   if (loading) {
@@ -74,6 +85,25 @@ export function SettingsView({ onRedoOnboarding }: Props) {
           {permissionDenied && (
             <p className="text-[10px] text-red-400 mt-1">
               Chrome didn't grant permission for that URL's host — settings not saved.
+            </p>
+          )}
+          {settings.n8nUrl.includes('/webhook-test/') && (
+            <p className="text-[10px] text-amber-400 mt-1">
+              This is a test URL. n8n only answers it for one call right after you click
+              "Execute workflow" in the editor — use the /webhook/ path for normal use.
+            </p>
+          )}
+          <button
+            id="test-connection-btn"
+            onClick={handleTest}
+            disabled={testing}
+            className="mt-2 w-full py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-40 text-xs font-semibold transition-all"
+          >
+            {testing ? 'Testing…' : 'Test connection'}
+          </button>
+          {testResult && (
+            <p className={`text-[10px] mt-1.5 leading-relaxed ${testResult.startsWith('Connected') ? 'text-emerald-400' : 'text-amber-400'}`}>
+              {testResult}
             </p>
           )}
         </div>

@@ -227,18 +227,13 @@ async function handleMessage(message: any) {
     // ── Cold-start onboarding ───────────────────────────────────────────────────
     case 'COLD_START': {
       const payload = message.payload as ColdStartPayload;
-      const response = await submitColdStart(payload);
-      if (!response?.profile_id) {
-        return {
-          success: false,
-          error: response
-            ? coachErrorText(response)
-            : 'Could not reach the coach backend. Check your n8n URL in Settings.',
-        };
+      const { data, error } = await submitColdStart(payload);
+      if (!data?.profile_id) {
+        return { success: false, error: error || (data ? coachErrorText(data) : 'Onboarding did not return a profile id.') };
       }
       const settings = await getSettings();
-      await saveSettings({ ...settings, profile_id: response.profile_id, onboarded: true });
-      return { success: true, profile_id: response.profile_id, priors_saved: response.priors_saved };
+      await saveSettings({ ...settings, profile_id: data.profile_id, onboarded: true });
+      return { success: true, profile_id: data.profile_id, priors_saved: data.priors_saved };
     }
 
     // ── Load daily plan ────────────────────────────────────────────────────────
