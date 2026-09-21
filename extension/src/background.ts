@@ -13,8 +13,15 @@ function coachErrorText(res: CoachResponse): string {
         || 'Attempt recorded, but the skill update could not run. It will be re-derived on the next sync.';
     case 'backend_temporarily_unavailable':
       return 'The coach database is unreachable right now. Your session is still being tracked.';
-    default:
-      return res.hint || res.detail || 'The coach could not process that request.';
+    case 'cold_start_failed':
+    case 'cold_start_returned_no_profile':
+      return [res.detail, res.hint].filter(Boolean).join(' ');
+    default: {
+      if (res.hint || res.detail) return [res.detail, res.hint].filter(Boolean).join(' ');
+      // Never dead-end on an unrecognised reply — show it, so the next step is
+      // obvious instead of requiring a trip through the service worker console.
+      return `Unexpected reply from the coach: ${JSON.stringify(res).slice(0, 300)}`;
+    }
   }
 }
 

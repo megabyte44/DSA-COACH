@@ -1150,7 +1150,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { success: true, profile_id: $json.profile_id, priors_saved: $json.priors_saved, next: 'Keep this profile_id in the extension. LeetCode import is running; POST /webhook/dsa-coach/plan for today.' } }}",
+        "responseBody": "={{ $json.profile_id ? { success: true, profile_id: $json.profile_id, priors_saved: $json.priors_saved, next: 'Keep this profile_id in the extension. LeetCode import is running; POST /webhook/dsa-coach/plan for today.' } : { success: false, error: 'cold_start_returned_no_profile', detail: 'The cold start query completed without returning a profile row.', hint: 'Check the profiles table exists and that Save Profile And Priors returned a row in the n8n execution log.' } }}",
         "options": {}
       },
       "id": "5b3592c8-9318-5c74-b312-f292f7fb3814",
@@ -1277,7 +1277,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const err = ($input.first().json && $input.first().json.error) || {};\nreturn [{ json: { success: false, error: 'backend_temporarily_unavailable', detail: String(err.message || err.description || err || 'unknown') } }];"
+        "jsCode": "const err = ($input.first().json && $input.first().json.error) || {};\nconst detail = String(err.message || err.description || err || 'unknown');\nreturn [{ json: {\n  success: false,\n  error: 'cold_start_failed',\n  detail,\n  hint: 'Open the failed execution in n8n and read the Save Profile And Priors node. Usual causes: the tables are not created yet, or profiles has a unique constraint (e.g. email) that this insert does not handle.'\n} }];"
       },
       "id": "f3a1c9e2-7b4d-5a6e-9c1f-2d8e6b4a0c12",
       "name": "Cold Start Error Response",
@@ -1373,6 +1373,21 @@
       "position": [
         1500,
         1300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "c4d2a1b0-1106-5a00-9000-000000000106",
+      "name": "Return Cold Start Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        750,
+        1950
       ]
     }
   ],
@@ -1966,7 +1981,7 @@
       "main": [
         [
           {
-            "node": "Return Cold Start",
+            "node": "Return Cold Start Error",
             "type": "main",
             "index": 0
           }
