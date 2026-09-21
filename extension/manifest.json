@@ -28,6 +28,7 @@
   ],
   "host_permissions": [
     "*://*.leetcode.com/*",
+    "https://*.n8n.cloud/*",
     "http://localhost/*"
   ],
   "optional_host_permissions": [

@@ -1,7 +1,9 @@
 import type { SessionState, Settings, PendingEvent } from '../types';
 
 // ─── Default Values ────────────────────────────────────────────────────────────
-export const DEFAULT_N8N_URL = 'https://YOUR-N8N-HOST/webhook/dsa-coach/event';
+// Production path. n8n's /webhook-test/ URLs only fire once, and only while the
+// editor is listening, so they are for debugging in the n8n UI — not for daily use.
+export const DEFAULT_N8N_URL = 'https://punithnaidu2006.app.n8n.cloud/webhook/dsa-coach/event';
 
 export const DEFAULT_SETTINGS: Settings = {
   n8nUrl: DEFAULT_N8N_URL,
