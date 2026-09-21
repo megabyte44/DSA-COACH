@@ -47,7 +47,8 @@
       "position": [
         250,
         0
-      ]
+      ],
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -208,7 +209,10 @@
           "name": "Postgres account"
         }
       },
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -232,7 +236,10 @@
           "name": "Postgres account"
         }
       },
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -257,7 +264,10 @@
         }
       },
       "alwaysOutputData": true,
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -295,7 +305,10 @@
         }
       },
       "alwaysOutputData": true,
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -319,7 +332,10 @@
           "name": "Postgres account"
         }
       },
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -344,7 +360,10 @@
         }
       },
       "alwaysOutputData": true,
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -384,11 +403,15 @@
           "name": "Postgres account"
         }
       },
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "jsCode": "const d = $input.first().json;\nconst att = d.attempt || {};\nconst src = att._source || 'recalc';\nconst pats = d.patterns || [];\nif (!d.profile_id || pats.length === 0) return [{ json: { skip: true, source: src, profile_id: d.profile_id || null } }];\n\nconst LADDER = [1, 3, 7, 14, 30, 60];\nconst DIFF_W = { Easy: 0.7, Medium: 1, Hard: 1.3 };\nconst imported = h => h.source === 'leetcode_sync' || h.source === 'import';\n\nconst score = h => {\n  if (h.result !== 'accepted') return 0.15;\n  let s = 1 - Math.min(Number(h.hints_used) || 0, 4) * 0.12;\n  if (h.solution_viewed || h.editorial_viewed) s = Math.min(s, 0.3);\n  if (imported(h)) s = Math.min(s, 0.65);\n  if (h.confidence) s *= 0.75 + 0.25 * (Number(h.confidence) / 5);\n  return Math.max(0, s);\n};\n\nreturn pats.map(p => {\n  const hs = (d.history || [])\n    .filter(h => (h.patterns || []).includes(p.name))\n    .sort((a, b) => new Date(a.submitted_at) - new Date(b.submitted_at));\n  const sk = (d.skills || []).find(s => s.name === p.name) || {};\n  const prior = sk.prior_mastery == null ? 0 : Number(sk.prior_mastery);\n\n  let num = 0, den = 0;\n  hs.forEach((h, i) => {\n    let w = (DIFF_W[h.difficulty] || 1) * Math.pow(0.9, hs.length - 1 - i);\n    if (h.result !== 'accepted') w *= 0.6;\n    if (imported(h)) w *= 0.6;\n    num += w * score(h);\n    den += w;\n  });\n  const PRIOR_W = 1.5;\n  const mastery = Math.max(0, Math.min(1, (num + PRIOR_W * prior) / (den + PRIOR_W)));\n\n  const solved = new Map();\n  hs.filter(h => h.result === 'accepted').forEach(h => solved.set(h.problem_slug, h.difficulty));\n  const cnt = k => [...solved.values()].filter(x => x === k).length;\n  const timed = hs.filter(h => h.result === 'accepted' && Number(h.duration_seconds) > 0);\n  const errs = {};\n  hs.forEach(h => (Array.isArray(h.error_types) ? h.error_types : []).forEach(e => { errs[e] = (errs[e] || 0) + 1; }));\n  const confs = hs.filter(h => h.confidence).slice(-5).map(h => Number(h.confidence));\n\n  // spaced repetition: 1,3,7,14,30,60 days; strong = climb, assisted = hold, failed = drop two rungs\n  const live = src === 'submission';\n  let idx = sk.review_interval_days ? LADDER.findIndex(x => x >= Number(sk.review_interval_days)) : -1;\n  if (live) {\n    if (att.performance === 'strong') idx = Math.min(idx + 1, LADDER.length - 1);\n    else if (att.performance === 'assisted') idx = Math.max(idx, 0);\n    else idx = Math.max(idx - 2, 0);\n  }\n  const interval = LADDER[Math.max(idx, 0)];\n\n  return { json: {\n    skip: false, source: src, profile_id: d.profile_id, pattern: p.name,\n    mastery: Number(mastery.toFixed(4)),\n    confidence: confs.length ? Number((confs.reduce((a, b) => a + b, 0) / confs.length).toFixed(2)) : null,\n    problems_solved: solved.size, easy_solved: cnt('Easy'), medium_solved: cnt('Medium'), hard_solved: cnt('Hard'),\n    problems_attempted: hs.length,\n    avg_time_seconds: timed.length ? Math.round(timed.reduce((a, h) => a + Number(h.duration_seconds), 0) / timed.length) : 0,\n    hint_rate: hs.length ? Number((hs.filter(h => Number(h.hints_used) > 0).length / hs.length).toFixed(3)) : 0,\n    failure_rate: hs.length ? Number((hs.filter(h => h.result !== 'accepted').length / hs.length).toFixed(3)) : 0,\n    last_practiced: hs.length ? hs[hs.length - 1].submitted_at : null,\n    review_interval_days: interval,\n    update_review: live,\n    error_profile: JSON.stringify(errs),\n    result: att.result || 'recalc'\n  } };\n});"
+        "jsCode": "const first = $input.first().json || {};\n// An upstream database failure arrives here as an error item.\nif (first.error || (!first.profile_id && !first.patterns)) {\n  let src = 'recalc';\n  try {\n    const ev = $('Validate Event').first().json;\n    if (ev && ev.event) src = ev.event === 'reflection' ? 'reflection' : 'submission';\n  } catch (e) {}\n  return [{ json: { skip: true, degraded: true, source: src, profile_id: first.profile_id || null } }];\n}\n\nconst d = first;\nconst att = d.attempt || {};\nconst src = att._source || 'recalc';\nconst pats = d.patterns || [];\nif (!d.profile_id || pats.length === 0) return [{ json: { skip: true, source: src, profile_id: d.profile_id || null } }];\n\nconst DAY = 86400000;\nconst nowMs = Date.now();\nconst LADDER = [1, 3, 7, 14, 30, 60];\nconst DIFF_W = { Easy: 0.7, Medium: 1, Hard: 1.3 };\n// A failure still carries information, but how much depends on how it failed.\n// A TLE means the shape was recognised and the complexity was not; a compile\n// error says almost nothing about whether the pattern is understood.\nconst FAIL_SCORE = { time_limit_exceeded: 0.3, memory_limit_exceeded: 0.28, wrong_answer: 0.2, runtime_error: 0.15, compile_error: 0.1, other: 0.15 };\nconst imported = h => h.source === 'leetcode_sync' || h.source === 'import';\nconst ts = h => { const t = h.submitted_at ? Date.parse(h.submitted_at) : NaN; return isNaN(t) ? 0 : t; };\n\nconst score = h => {\n  if (h.result !== 'accepted') return FAIL_SCORE[h.result] != null ? FAIL_SCORE[h.result] : 0.15;\n  let s = 1 - Math.min(Number(h.hints_used) || 0, 4) * 0.12;\n  if (h.solution_viewed || h.editorial_viewed) s = Math.min(s, 0.3);\n  if (imported(h)) s = Math.min(s, 0.65);\n  if (h.confidence) s *= 0.75 + 0.25 * (Number(h.confidence) / 5);\n  return Math.max(0, s);\n};\n\nreturn pats.map(p => {\n  const hs = (d.history || [])\n    .filter(h => (h.patterns || []).includes(p.name))\n    .sort((a, b) => ts(a) - ts(b));\n  const sk = (d.skills || []).find(s => s.name === p.name) || {};\n  const prior = sk.prior_mastery == null ? 0 : Number(sk.prior_mastery);\n\n  let num = 0, den = 0;\n  hs.forEach((h, i) => {\n    const t = ts(h);\n    const ageDays = t ? Math.max(0, (nowMs - t) / DAY) : 0;\n    // Two decays, because position in the sequence and elapsed time are not the\n    // same thing: practice from six months ago should not weigh like yesterday's.\n    let w = (DIFF_W[h.difficulty] || 1) * Math.pow(0.95, hs.length - 1 - i) * Math.exp(-ageDays / 120);\n    if (h.result !== 'accepted') w *= 0.6;\n    if (imported(h)) w *= 0.6;\n    num += w * score(h);\n    den += w;\n  });\n\n  // The self-rating anchors the estimate on day one and fades as real attempts\n  // accumulate, so demonstrated evidence overtakes what was claimed.\n  const PRIOR_W = hs.length === 0 ? 2 : Math.max(0.4, 1.5 * Math.exp(-hs.length / 6));\n  const mastery = Math.max(0, Math.min(1, (num + PRIOR_W * prior) / (den + PRIOR_W)));\n\n  const solved = new Map();\n  hs.filter(h => h.result === 'accepted').forEach(h => solved.set(h.problem_slug, h.difficulty));\n  const cnt = k => [...solved.values()].filter(x => x === k).length;\n  const timed = hs.filter(h => h.result === 'accepted' && Number(h.duration_seconds) > 0);\n  const errs = {};\n  hs.forEach(h => (Array.isArray(h.error_types) ? h.error_types : []).forEach(e => { errs[e] = (errs[e] || 0) + 1; }));\n  const confs = hs.filter(h => h.confidence).slice(-5).map(h => Number(h.confidence));\n\n  // spaced repetition: 1,3,7,14,30,60 days; strong = climb, assisted = hold, failed = drop two rungs\n  const live = src === 'submission';\n  let idx = sk.review_interval_days ? LADDER.findIndex(x => x >= Number(sk.review_interval_days)) : -1;\n  if (live) {\n    if (att.performance === 'strong') idx = Math.min(idx + 1, LADDER.length - 1);\n    else if (att.performance === 'assisted') idx = Math.max(idx, 0);\n    else idx = Math.max(idx - 2, 0);\n  }\n  const interval = LADDER[Math.max(idx, 0)];\n\n  return { json: {\n    skip: false, source: src, profile_id: d.profile_id, pattern: p.name,\n    mastery: Number(mastery.toFixed(4)),\n    confidence: confs.length ? Number((confs.reduce((a, b) => a + b, 0) / confs.length).toFixed(2)) : null,\n    problems_solved: solved.size, easy_solved: cnt('Easy'), medium_solved: cnt('Medium'), hard_solved: cnt('Hard'),\n    problems_attempted: hs.length,\n    avg_time_seconds: timed.length ? Math.round(timed.reduce((a, h) => a + Number(h.duration_seconds), 0) / timed.length) : 0,\n    hint_rate: hs.length ? Number((hs.filter(h => Number(h.hints_used) > 0).length / hs.length).toFixed(3)) : 0,\n    failure_rate: hs.length ? Number((hs.filter(h => h.result !== 'accepted').length / hs.length).toFixed(3)) : 0,\n    last_practiced: hs.length ? hs[hs.length - 1].submitted_at : null,\n    review_interval_days: interval,\n    update_review: live,\n    error_profile: JSON.stringify(errs),\n    result: att.result || 'recalc'\n  } };\n});"
       },
       "id": "d364af3b-e297-50ed-ac80-bf1d707eb1b2",
       "name": "Compute Skill Update",
@@ -421,7 +444,11 @@
           "name": "Postgres account"
         }
       },
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -458,7 +485,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const ctx = $('Load Skill Inputs').first().json;\nconst a = ctx.attempt || {};\nconst skills = $input.all().map(i => i.json)\n  .filter(r => r.pattern && r.mastery !== null && r.mastery !== undefined)\n  .map(r => ({ pattern: r.pattern, mastery_pct: Math.round(Number(r.mastery) * 100), problems_solved: r.problems_solved, review_interval_days: r.review_interval_days, next_review: r.next_review }));\nconst isReflection = a._source === 'reflection';\nlet message, next;\nif (isReflection) { message = 'Reflection saved. Your skill profile was re-scored with it.'; next = 'continue'; }\nelse if (a.result === 'accepted' && a.performance === 'strong') { message = 'Independent solve. Real evidence that the pattern is sticking.'; next = 'review_later'; }\nelse if (a.result === 'accepted') { message = 'Accepted, but assisted. It will come back for an unaided review.'; next = 'spaced_review'; }\nelse { message = 'Useful evidence. Name the exact failure before you retry.'; next = 'diagnose_and_retry'; }\nreturn [{ json: {\n  success: true,\n  event: isReflection ? 'reflection' : 'submission',\n  attempt_id: a.id || null,\n  attempt_number: a.attempt_number || null,\n  result: a.result || null,\n  performance: a.performance || null,\n  skills_updated: skills,\n  coach: { message, next_action: next,\n    ask_reflection: !isReflection && a.result === 'accepted',\n    ask_error_types: !isReflection && a.performance !== 'strong' }\n} }];"
+        "jsCode": "const rows = $input.all().map(i => i.json);\nconst scored = rows.filter(r => r && r.pattern && r.mastery !== null && r.mastery !== undefined);\nconst degraded = rows.some(r => r && r.degraded) && scored.length === 0;\n\nif (degraded) {\n  // The attempt itself may well have been recorded before the failure, so pass\n  // back its id — the extension needs it to attach a reflection.\n  let attemptId = null;\n  try { attemptId = $('Record Attempt').first().json.id || null; } catch (e) { /* not a submission */ }\n  if (!attemptId) { try { attemptId = $('Save Reflection').first().json.id || null; } catch (e) {} }\n  return [{ json: {\n    success: false,\n    error: 'skill_update_unavailable',\n    event: 'submission',\n    attempt_id: attemptId,\n    skills_updated: [],\n    coach: { message: 'Attempt recorded. The skill update could not run just now and will be re-derived on the next sync.',\n      next_action: 'continue' }\n  } }];\n}\n\nconst ctx = $('Load Skill Inputs').first().json;\nconst a = (ctx && ctx.attempt) || {};\nconst skills = scored.map(r => ({ pattern: r.pattern, mastery_pct: Math.round(Number(r.mastery) * 100), problems_solved: r.problems_solved, review_interval_days: r.review_interval_days, next_review: r.next_review }));\nconst isReflection = a._source === 'reflection';\nlet message, next;\nif (isReflection) { message = 'Reflection saved. Your skill profile was re-scored with it.'; next = 'continue'; }\nelse if (a.result === 'accepted' && a.performance === 'strong') { message = 'Independent solve. Real evidence that the pattern is sticking.'; next = 'review_later'; }\nelse if (a.result === 'accepted') { message = 'Accepted, but assisted. It will come back for an unaided review.'; next = 'spaced_review'; }\nelse { message = 'Useful evidence. Name the exact failure before you retry.'; next = 'diagnose_and_retry'; }\nreturn [{ json: {\n  success: true,\n  event: isReflection ? 'reflection' : 'submission',\n  attempt_id: a.id || null,\n  attempt_number: a.attempt_number || null,\n  result: a.result || null,\n  performance: a.performance || null,\n  skills_updated: skills,\n  coach: { message, next_action: next,\n    ask_reflection: !isReflection && a.result === 'accepted',\n    ask_error_types: !isReflection && a.performance !== 'strong' }\n} }];"
       },
       "id": "20670ecb-f407-57b4-99b6-6aedd4ca4115",
       "name": "Build Submission Response",
@@ -492,7 +519,10 @@
         }
       },
       "alwaysOutputData": true,
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -546,8 +576,8 @@
         "modelId": {
           "__rl": true,
           "mode": "list",
-          "value": "gpt-4o-mini",
-          "cachedResultName": "gpt-4o-mini"
+          "value": "gpt-4o",
+          "cachedResultName": "gpt-4o"
         },
         "responses": {
           "values": [
@@ -682,12 +712,16 @@
           "name": "Postgres account"
         }
       },
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH pf AS (\n  SELECT p.*, $2::text AS via FROM profiles p WHERE p.id = $1::uuid\n), pats AS (\n  SELECT p.name, p.topic, p.tier, p.weight, p.prerequisites, p.recognition_signals,\n    COALESCE(s.mastery, 0) AS mastery, s.prior_mastery, s.last_practiced, s.next_review,\n    COALESCE(s.problems_attempted, 0) AS attempted, COALESCE(s.problems_solved, 0) AS solved,\n    CASE WHEN s.last_practiced IS NULL THEN NULL ELSE floor(extract(epoch FROM (now() - s.last_practiced)) / 86400)::int END AS days_since,\n    COALESCE(s.next_review <= now(), false) AS review_due\n  FROM patterns p LEFT JOIN skills s ON s.pattern_id = p.id AND s.profile_id = $1::uuid\n), cand AS (\n  SELECT t.set_name, t.position, t.slug, t.title, t.difficulty, t.patterns, t.url,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug) AS tries,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug AND a.result = 'accepted') AS accepted_count,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug AND a.performance = 'strong') AS strong_count,\n    (SELECT max(a.submitted_at) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug) AS last_attempt_at\n  FROM target_set_problems t\n  WHERE t.set_name = ANY(COALESCE((SELECT target_sets FROM pf), ARRAY['starter']))\n)\nSELECT\n  (SELECT to_jsonb(pf) FROM pf) AS profile,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(pats)), '[]'::jsonb) FROM pats) AS patterns,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(r)), '[]'::jsonb) FROM (\n     SELECT a.difficulty, a.result, a.performance, a.hints_used, a.submitted_at, a.problem_slug\n     FROM attempts a WHERE a.profile_id = $1::uuid ORDER BY a.submitted_at DESC LIMIT 8) r) AS recent,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(cand)), '[]'::jsonb) FROM cand) AS candidates,\n  (SELECT max(submitted_at) FROM attempts WHERE profile_id = $1::uuid) AS last_attempt_at,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(pl)), '[]'::jsonb) FROM (\n     SELECT plan_date, mode, restart_step FROM plans\n     WHERE profile_id = $1::uuid AND plan_date < current_date ORDER BY plan_date DESC LIMIT 4) pl) AS recent_plans,\n  extract(dow FROM now())::int AS dow,\n  current_date::text AS today;",
+        "query": "WITH pf AS (\n  SELECT p.*, $2::text AS via FROM profiles p WHERE p.id = $1::uuid\n), pats AS (\n  SELECT p.name, p.topic, p.tier, p.weight, p.prerequisites, p.recognition_signals,\n    COALESCE(s.mastery, 0) AS mastery, s.prior_mastery, s.last_practiced, s.next_review,\n    COALESCE(s.problems_attempted, 0) AS attempted, COALESCE(s.problems_solved, 0) AS solved,\n    CASE WHEN s.last_practiced IS NULL THEN NULL ELSE floor(extract(epoch FROM (now() - s.last_practiced)) / 86400)::int END AS days_since,\n    COALESCE(s.next_review <= now(), false) AS review_due\n  FROM patterns p LEFT JOIN skills s ON s.pattern_id = p.id AND s.profile_id = $1::uuid\n), cand AS (\n  SELECT t.set_name, t.position, t.slug, t.title, t.difficulty, t.patterns, t.url,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug) AS tries,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug AND a.result = 'accepted') AS accepted_count,\n    (SELECT count(*) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug AND a.performance = 'strong') AS strong_count,\n    (SELECT max(a.submitted_at) FROM attempts a WHERE a.profile_id = $1::uuid AND a.problem_slug = t.slug) AS last_attempt_at\n  FROM target_set_problems t\n  WHERE t.set_name = ANY(COALESCE((SELECT target_sets FROM pf), ARRAY['starter']))\n)\nSELECT\n  (SELECT to_jsonb(pf) FROM pf) AS profile,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(pats)), '[]'::jsonb) FROM pats) AS patterns,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(r)), '[]'::jsonb) FROM (\n     SELECT a.difficulty, a.result, a.performance, a.hints_used, a.submitted_at, a.problem_slug, pr.patterns\n     FROM attempts a LEFT JOIN problems pr ON pr.id = a.problem_id WHERE a.profile_id = $1::uuid ORDER BY a.submitted_at DESC LIMIT 8) r) AS recent,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(cand)), '[]'::jsonb) FROM cand) AS candidates,\n  (SELECT max(submitted_at) FROM attempts WHERE profile_id = $1::uuid) AS last_attempt_at,\n  (SELECT COALESCE(jsonb_agg(to_jsonb(pl)), '[]'::jsonb) FROM (\n     SELECT plan_date, mode, restart_step FROM plans\n     WHERE profile_id = $1::uuid AND plan_date < current_date ORDER BY plan_date DESC LIMIT 4) pl) AS recent_plans,\n  extract(dow FROM now())::int AS dow,\n  current_date::text AS today;",
         "options": {
           "queryReplacement": "={{ [ $json.profile_id, $json.via ] }}"
         }
@@ -706,11 +740,15 @@
           "name": "Postgres account"
         }
       },
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "jsCode": "const d = $input.first().json;\nconst pf = d.profile;\nif (!pf) throw new Error('No profile found. POST /webhook/dsa-coach/cold-start first (or insert a row into profiles).');\nconst DAY = 86400000, now = new Date();\nconst pats = d.patterns || [], cands = d.candidates || [], recent = d.recent || [];\nconst budget = Number(pf.daily_minutes) || (Number(pf.hours_per_week) ? Math.round(Number(pf.hours_per_week) * 60 / 7) : 45);\nconst gapDays = d.last_attempt_at ? Math.floor((now - new Date(d.last_attempt_at)) / DAY) : null;\nconst toTarget = pf.target_date ? Math.ceil((new Date(pf.target_date) - now) / DAY) : null;\n\n// ---- 1. coach mode -------------------------------------------------------\nlet mode = 'build', restartStep = 0;\nif (toTarget !== null) mode = toTarget <= 3 ? 'taper' : toTarget <= 14 ? 'mock' : toTarget <= 28 ? 'consolidate' : 'build';\nconst prev = (d.recent_plans || []).find(p => Number(p.restart_step) > 0);\nconst prevAge = prev ? (new Date(d.today) - new Date(prev.plan_date)) / DAY : 99;\nif (mode !== 'taper') {\n  if (gapDays !== null && gapDays >= 5) { mode = 'restart'; restartStep = 1; }\n  else if (prev && Number(prev.restart_step) === 1 && prevAge <= 2 && gapDays !== null && gapDays <= 1) { mode = 'restart'; restartStep = 2; }\n}\n\n// ---- 2. difficulty controller (recent evidence, not totals) ---------------\nconst NAMES = ['Easy', 'Medium', 'Hard'], IDX = { Easy: 0, Medium: 1, Hard: 2 };\nlet trend = 0;\nconst l4 = recent.slice(0, 4), l2 = recent.slice(0, 2);\nif (l4.length === 4 && l4.filter(r => r.performance === 'strong').length >= 3) trend = 1;\nif (l2.length === 2 && l2.every(r => r.result !== 'accepted')) trend = -1;\nconst want = p => NAMES[Math.max(0, Math.min(2, (p.m < 0.35 ? 0 : p.m < 0.7 ? 1 : 2) + trend))];\n\n// ---- 3. priority = weight x gap x forgetting ------------------------------\nconst byName = Object.fromEntries(pats.map(p => [p.name, p]));\nconst target = t => ({ A: 0.8, B: 0.65, C: 0.5 }[t] || 0.6);\nconst scored = pats.map(p => {\n  const w = Number(p.weight) || 0.5, m = Number(p.mastery) || 0;\n  const gap = Math.max(0.05, target(p.tier) - m);\n  let f = 1;\n  if (p.days_since !== null && p.days_since !== undefined) f += Math.min(1.5, p.days_since / 14);\n  if (p.review_due) f += 0.5;\n  const uncal = Number(p.attempted) === 0 && m > 0;\n  if (uncal) f += 0.3;\n  const blocked = (p.prerequisites || []).some(q => byName[q] && Number(byName[q].mastery) < 0.35);\n  let priority = w * gap * f;\n  if (blocked && mode === 'build') priority *= 0.4;\n  if (mode === 'build' && Number(p.attempted) === 0) priority *= 1.15;\n  if (mode === 'consolidate' && Number(p.attempted) > 0) priority *= 1.2;\n  if (mode === 'taper' && m < 0.5) priority *= 0.3;\n  return { ...p, w, m, gap, f, uncal, blocked, priority };\n}).sort((a, b) => b.priority - a.priority);\n\n// ---- 4. problem picking from curated target sets -------------------------\nconst used = new Set();\nconst kind = c => Number(c.accepted_count) > 0 ? (Number(c.strong_count) > 0 ? 'mastered' : 'assisted') : (Number(c.tries) > 0 ? 'failed' : 'new');\nconst ageDays = c => c.last_attempt_at ? (now - new Date(c.last_attempt_at)) / DAY : 0;\nconst pick = (name, diff, kinds) => {\n  const fit = c => 1 - 0.5 * Math.abs((IDX[c.difficulty] ?? 1) - IDX[diff]) + (kind(c) === 'failed' ? 0.3 : 0)\n    + (kind(c) === 'assisted' ? Math.min(ageDays(c), 30) * 0.01 : 0) - Number(c.position) * 0.001;\n  const c = cands.filter(x => (x.patterns || []).includes(name) && !used.has(x.slug) && kinds.includes(kind(x))).sort((a, b) => fit(b) - fit(a))[0];\n  if (c) used.add(c.slug);\n  return c || null;\n};\nconst prob = c => c ? { slug: c.slug, title: c.title, difficulty: c.difficulty, url: c.url } : null;\nconst mins = dif => dif === 'Easy' ? 15 : dif === 'Medium' ? 25 : 35;\nconst why = p => 'weight ' + p.w.toFixed(2) + ' x gap ' + p.gap.toFixed(2) + ' x forgetting ' + p.f.toFixed(2)\n  + (p.review_due ? ', review due' : '') + (p.uncal ? ', self-rating not verified yet' : '')\n  + (p.blocked && mode === 'build' ? ', prerequisite still weak' : '');\nconst newItem = (p, type, w) => {\n  const dif = w || want(p);\n  const c = pick(p.name, dif, ['failed', 'new']) || pick(p.name, dif, ['assisted']);\n  const d2 = c ? c.difficulty : dif;\n  return { type: p.uncal && type === 'new' ? 'calibration' : type, pattern: p.name, minutes: mins(d2), difficulty: d2, problem: prob(c),\n    note: c ? null : 'No curated ' + d2 + ' problem for ' + p.name + '. Pick any ' + d2 + ' problem tagged with it.', reason: why(p) };\n};\nconst reviewItem = (p, w) => {\n  const dif = w || (p.m < 0.5 ? 'Easy' : 'Medium');\n  const c = pick(p.name, dif, ['assisted', 'failed']) || pick(p.name, dif, ['new']);\n  return { type: 'review', pattern: p.name, minutes: 15, difficulty: c ? c.difficulty : dif, problem: prob(c),\n    note: c ? null : 'No curated problem left for ' + p.name + '. Redo any problem you solved with help.', reason: why(p) };\n};\n\n// ---- 5. assemble the plan --------------------------------------------------\nlet items = [], message = '';\nconst practiced = scored.filter(p => Number(p.attempted) > 0);\nconst mockDay = mode !== 'restart' && mode !== 'taper' && d.dow === Number(pf.mock_weekday ?? 6);\nif (mode === 'restart' && restartStep === 1) {\n  const strong = practiced.slice().sort((a, b) => b.m - a.m)[0] || scored[0];\n  items = [{ ...newItem(strong, 'restart_easy', 'Easy') }];\n  message = \"Welcome back. Let's rebuild momentum. One easy win today, nothing more.\";\n} else if (mode === 'restart') {\n  const decayed = practiced.slice().sort((a, b) => (b.days_since || 0) - (a.days_since || 0)).slice(0, 2);\n  while (decayed.length < 2 && scored[decayed.length]) decayed.push(scored[decayed.length]);\n  items = decayed.map(p => ({ ...reviewItem(p), type: 'decay_review' }));\n  message = 'Good to see you back. Two problems from the patterns that faded the most, then we return to the normal load.';\n} else if (mode === 'taper') {\n  const light = practiced.filter(p => p.m >= 0.4).sort((a, b) => b.f - a.f).slice(0, 3);\n  items = (light.length ? light : practiced.slice(0, 2)).map(p => reviewItem(p, 'Easy'));\n  message = 'Taper: light review only, no new topics. Sleep matters more than one more problem.';\n} else if (mockDay) {\n  const a = scored[0], b2 = scored[1] || scored[0];\n  const hardOk = b2.m >= 0.6 && trend >= 0;\n  items = [{ ...newItem(a, 'mock', 'Medium'), minutes: 22, timed: true }, { ...newItem(b2, 'mock', hardOk ? 'Hard' : 'Medium'), minutes: 23, timed: true }];\n  message = 'Weekly mock: 45 minutes, two problems, no hints. After each one, say the pattern and complexity out loud.';\n} else {\n  const pool = mode === 'consolidate' && practiced.length ? practiced : scored;\n  const P1 = pool[0], P2 = pool.find(p => p !== P1);\n  const R = scored.filter(p => Number(p.attempted) > 0 && (p.review_due || (p.days_since || 0) >= 7) && p !== P1 && p !== P2)\n    .sort((a, b) => b.f * b.w - a.f * a.w)[0];\n  const comps = [newItem(P1, 'new')];\n  if (R) comps.push(reviewItem(R));\n  if (P1.m < 0.6) comps.push({ type: 'recognition', pattern: P1.name, minutes: 5, detail: P1.recognition_signals, reason: 'Recognition is the real skill for ' + P1.name });\n  comps.push({ type: 'explain', pattern: P1.name, minutes: 10, detail: \"For today's main problem, state the pattern, why it fits, time and space complexity.\", reason: 'Interview communication' });\n  if (P2) comps.push(newItem(P2, 'new'));\n  let used2 = 0;\n  const chosen = [];\n  comps.forEach((c, i) => { if (i === 0 || used2 + c.minutes <= budget) { chosen.push(c); used2 += c.minutes; } });\n  const order = { recognition: 0, new: 1, calibration: 1, review: 2, explain: 3 };\n  let seenMain = 0;\n  chosen.sort((a, b) => (order[a.type] ?? 1) - (order[b.type] ?? 1));\n  items = chosen.map(c => mode === 'mock' && c.problem ? { ...c, timed: true } : c);\n  message = mode[0].toUpperCase() + mode.slice(1) + ' mode' + (toTarget !== null ? ' - ' + toTarget + ' days to target' : '') + '. Top focus: ' + P1.name + '.'\n    + (trend === -1 ? ' Recent attempts were rough, so difficulty is lowered and this pattern is reviewed first.' : trend === 1 ? ' You are on a strong run, so difficulty steps up.' : '');\n}\nconst plan = {\n  plan_date: d.today, mode, restart_step: restartStep, days_to_target: toTarget, budget_minutes: budget,\n  total_minutes: items.reduce((s, x) => s + x.minutes, 0), message, difficulty_trend: trend,\n  items: items.map((x, i) => ({ order: i + 1, ...x })),\n  priorities: scored.slice(0, 6).map(p => ({ pattern: p.name, tier: p.tier, mastery: Number(p.m.toFixed(2)), priority: Number(p.priority.toFixed(3)), days_since: p.days_since, review_due: p.review_due })),\n  skills: scored.map(p => ({ pattern: p.name, topic: p.topic, mastery: Math.round(p.m * 100), problems_solved: p.solved, last_practiced: p.last_practiced }))\n};\nreturn [{ json: { profile_id: pf.id, email: pf.email, via: pf.via, plan } }];"
+        "jsCode": "const d = $input.first().json;\nconst pf = d.profile;\nif (!pf) throw new Error('No profile found. POST /webhook/dsa-coach/cold-start first (or insert a row into profiles).');\nconst DAY = 86400000, now = new Date();\nconst pats = d.patterns || [], cands = d.candidates || [], recent = d.recent || [];\nconst budget = Number(pf.daily_minutes) || (Number(pf.hours_per_week) ? Math.round(Number(pf.hours_per_week) * 60 / 7) : 45);\nconst gapDays = d.last_attempt_at ? Math.floor((now - new Date(d.last_attempt_at)) / DAY) : null;\nlet toTarget = pf.target_date ? Math.ceil((new Date(pf.target_date) - now) / DAY) : null;\n// A date that has already gone by must not pin the coach in taper mode forever.\nconst targetPassed = toTarget !== null && toTarget < 0;\nif (targetPassed) toTarget = null;\n\n// Nothing seeded to plan against — say so rather than failing on an empty list.\nif (!pats.length) {\n  return [{ json: { profile_id: pf.id, email: pf.email, via: pf.via, plan: {\n    plan_date: d.today, mode: 'build', restart_step: 0, days_to_target: toTarget, budget_minutes: budget,\n    total_minutes: 0, difficulty_trend: 0, items: [], priorities: [], skills: [],\n    message: 'No patterns are seeded yet. Load the patterns table (and at least one target set) before the coach can plan a day.'\n  } } }];\n}\n\n// ---- 1. coach mode -------------------------------------------------------\nlet mode = 'build', restartStep = 0;\nif (toTarget !== null) mode = toTarget <= 3 ? 'taper' : toTarget <= 14 ? 'mock' : toTarget <= 28 ? 'consolidate' : 'build';\nconst prev = (d.recent_plans || []).find(p => Number(p.restart_step) > 0);\nconst prevAge = prev ? (new Date(d.today) - new Date(prev.plan_date)) / DAY : 99;\nif (mode !== 'taper') {\n  if (gapDays !== null && gapDays >= 5) { mode = 'restart'; restartStep = 1; }\n  else if (prev && Number(prev.restart_step) === 1 && prevAge <= 2 && gapDays !== null && gapDays <= 1) { mode = 'restart'; restartStep = 2; }\n}\n\n// ---- 2. difficulty controller (recent evidence, not totals) ---------------\nconst NAMES = ['Easy', 'Medium', 'Hard'], IDX = { Easy: 0, Medium: 1, Hard: 2 };\nlet trend = 0;\nconst l4 = recent.slice(0, 4), l2 = recent.slice(0, 2);\nif (l4.length === 4 && l4.filter(r => r.performance === 'strong').length >= 3) trend = 1;\nif (l2.length === 2 && l2.every(r => r.result !== 'accepted')) trend = -1;\n// Overall form is a blunt instrument: a strong run on arrays says nothing about\n// graphs. Let each pattern's own recent attempts adjust its difficulty too.\nconst patTrend = name => {\n  const rs = recent.filter(r => (r.patterns || []).includes(name)).slice(0, 3);\n  if (rs.length >= 2 && rs.every(r => r.result !== 'accepted')) return -1;\n  if (rs.length >= 2 && rs.filter(r => r.performance === 'strong').length >= 2) return 1;\n  return 0;\n};\nconst want = p => {\n  const base = p.m < 0.35 ? 0 : p.m < 0.7 ? 1 : 2;\n  const adj = Math.max(-1, Math.min(1, trend + patTrend(p.name)));\n  return NAMES[Math.max(0, Math.min(2, base + adj))];\n};\n\n// ---- 3. priority = weight x gap x forgetting ------------------------------\nconst byName = Object.fromEntries(pats.map(p => [p.name, p]));\nconst target = t => ({ A: 0.8, B: 0.65, C: 0.5 }[t] || 0.6);\nconst scored = pats.map(p => {\n  const w = Number(p.weight) || 0.5, m = Number(p.mastery) || 0;\n  const gap = Math.max(0.05, target(p.tier) - m);\n  let f = 1;\n  if (p.days_since !== null && p.days_since !== undefined) f += Math.min(1.5, p.days_since / 14);\n  if (p.review_due) f += 0.5;\n  const uncal = Number(p.attempted) === 0 && m > 0;\n  if (uncal) f += 0.3;\n  const blocked = (p.prerequisites || []).some(q => byName[q] && Number(byName[q].mastery) < 0.35);\n  let priority = w * gap * f;\n  if (blocked && mode === 'build') priority *= 0.4;\n  if (mode === 'build' && Number(p.attempted) === 0) priority *= 1.15;\n  if (mode === 'consolidate' && Number(p.attempted) > 0) priority *= 1.2;\n  if (mode === 'taper' && m < 0.5) priority *= 0.3;\n  // A pattern that just failed twice needs attention now, whatever the tier says.\n  if (patTrend(p.name) === -1) priority *= 1.3;\n  return { ...p, w, m, gap, f, uncal, blocked, priority };\n}).sort((a, b) => b.priority - a.priority);\n\n// ---- 4. problem picking from curated target sets -------------------------\nconst used = new Set();\nconst kind = c => Number(c.accepted_count) > 0 ? (Number(c.strong_count) > 0 ? 'mastered' : 'assisted') : (Number(c.tries) > 0 ? 'failed' : 'new');\nconst ageDays = c => c.last_attempt_at ? (now - new Date(c.last_attempt_at)) / DAY : 0;\nconst pick = (name, diff, kinds, cap) => {\n  const fit = c => 1 - 0.5 * Math.abs((IDX[c.difficulty] ?? 1) - IDX[diff]) + (kind(c) === 'failed' ? 0.3 : 0)\n    + (kind(c) === 'assisted' ? Math.min(ageDays(c), 30) * 0.01 : 0) - Number(c.position) * 0.001;\n  let pool = cands.filter(x => (x.patterns || []).includes(name) && !used.has(x.slug) && kinds.includes(kind(x)));\n  // When a difficulty is asked for explicitly it is a ceiling, not a preference:\n  // a comeback day that hands back a Hard problem is not a comeback day.\n  if (cap) pool = pool.filter(x => (IDX[x.difficulty] ?? 1) <= IDX[diff]);\n  const c = pool.sort((a, b) => fit(b) - fit(a))[0];\n  if (c) used.add(c.slug);\n  return c || null;\n};\nconst prob = c => c ? { slug: c.slug, title: c.title, difficulty: c.difficulty, url: c.url } : null;\nconst mins = dif => dif === 'Easy' ? 15 : dif === 'Medium' ? 25 : 35;\nconst why = p => 'weight ' + p.w.toFixed(2) + ' x gap ' + p.gap.toFixed(2) + ' x forgetting ' + p.f.toFixed(2)\n  + (p.review_due ? ', review due' : '') + (p.uncal ? ', self-rating not verified yet' : '')\n  + (patTrend(p.name) === -1 ? ', recent attempts failed' : '')\n  + (p.blocked && mode === 'build' ? ', prerequisite still weak' : '');\nconst newItem = (p, type, w) => {\n  const dif = w || want(p);\n  const cap = !!w;\n  const c = pick(p.name, dif, ['failed', 'new'], cap) || pick(p.name, dif, ['assisted'], cap);\n  const d2 = c ? c.difficulty : dif;\n  return { type: p.uncal && type === 'new' ? 'calibration' : type, pattern: p.name, minutes: mins(d2), difficulty: d2, problem: prob(c),\n    note: c ? null : 'No curated ' + d2 + ' problem for ' + p.name + '. Pick any ' + d2 + ' problem tagged with it.', reason: why(p) };\n};\nconst reviewItem = (p, w) => {\n  const dif = w || (p.m < 0.5 ? 'Easy' : 'Medium');\n  const c = pick(p.name, dif, ['assisted', 'failed'], true) || pick(p.name, dif, ['new'], true);\n  return { type: 'review', pattern: p.name, minutes: 15, difficulty: c ? c.difficulty : dif, problem: prob(c),\n    note: c ? null : 'No curated problem left for ' + p.name + '. Redo any problem you solved with help.', reason: why(p) };\n};\n\n// ---- 5. assemble the plan --------------------------------------------------\nlet items = [], message = '';\nconst practiced = scored.filter(p => Number(p.attempted) > 0);\nconst mockDay = mode !== 'restart' && mode !== 'taper' && d.dow === Number(pf.mock_weekday ?? 6);\nif (mode === 'restart' && restartStep === 1) {\n  const strong = practiced.slice().sort((a, b) => b.m - a.m)[0] || scored[0];\n  items = [{ ...newItem(strong, 'restart_easy', 'Easy') }];\n  message = \"Welcome back. Let's rebuild momentum. One easy win today, nothing more.\";\n} else if (mode === 'restart') {\n  const decayed = practiced.slice().sort((a, b) => (b.days_since || 0) - (a.days_since || 0)).slice(0, 2);\n  while (decayed.length < 2 && scored[decayed.length]) decayed.push(scored[decayed.length]);\n  items = decayed.map(p => ({ ...reviewItem(p), type: 'decay_review' }));\n  message = 'Good to see you back. Two problems from the patterns that faded the most, then we return to the normal load.';\n} else if (mode === 'taper') {\n  const light = practiced.filter(p => p.m >= 0.4).sort((a, b) => b.f - a.f).slice(0, 3);\n  const base = light.length ? light : (practiced.length ? practiced.slice(0, 2) : scored.slice(0, 2));\n  items = base.map(p => reviewItem(p, 'Easy'));\n  message = 'Taper: light review only, no new topics. Sleep matters more than one more problem.';\n} else if (mockDay) {\n  const a = scored[0], b2 = scored[1] || scored[0];\n  const hardOk = b2.m >= 0.6 && trend >= 0;\n  items = [{ ...newItem(a, 'mock', 'Medium'), minutes: 22, timed: true }, { ...newItem(b2, 'mock', hardOk ? 'Hard' : 'Medium'), minutes: 23, timed: true }];\n  message = 'Weekly mock: 45 minutes, two problems, no hints. After each one, say the pattern and complexity out loud.';\n} else {\n  const pool = mode === 'consolidate' && practiced.length ? practiced : scored;\n  const P1 = pool[0], P2 = pool.find(p => p !== P1);\n  const R = scored.filter(p => Number(p.attempted) > 0 && (p.review_due || (p.days_since || 0) >= 7) && p !== P1 && p !== P2)\n    .sort((a, b) => b.f * b.w - a.f * a.w)[0];\n  const comps = [newItem(P1, 'new')];\n  if (R) comps.push(reviewItem(R));\n  if (P1.m < 0.6) comps.push({ type: 'recognition', pattern: P1.name, minutes: 5, detail: P1.recognition_signals, reason: 'Recognition is the real skill for ' + P1.name });\n  comps.push({ type: 'explain', pattern: P1.name, minutes: 10, detail: \"For today's main problem, state the pattern, why it fits, time and space complexity.\", reason: 'Interview communication' });\n  if (P2) comps.push(newItem(P2, 'new'));\n  let used2 = 0;\n  const chosen = [];\n  comps.forEach((c, i) => { if (i === 0 || used2 + c.minutes <= budget) { chosen.push(c); used2 += c.minutes; } });\n  const order = { recognition: 0, new: 1, calibration: 1, review: 2, explain: 3 };\n  chosen.sort((a, b) => (order[a.type] ?? 1) - (order[b.type] ?? 1));\n  items = chosen.map(c => mode === 'mock' && c.problem ? { ...c, timed: true } : c);\n  message = mode[0].toUpperCase() + mode.slice(1) + ' mode' + (toTarget !== null ? ' - ' + toTarget + ' days to target' : '') + '. Top focus: ' + P1.name + '.'\n    + (trend === -1 ? ' Recent attempts were rough, so difficulty is lowered and this pattern is reviewed first.' : trend === 1 ? ' You are on a strong run, so difficulty steps up.' : '');\n}\nif (targetPassed) message += ' Your target date has passed — set a new one to get deadline-aware planning back.';\n\nconst plan = {\n  plan_date: d.today, mode, restart_step: restartStep, days_to_target: toTarget, budget_minutes: budget,\n  total_minutes: items.reduce((s, x) => s + x.minutes, 0), message, difficulty_trend: trend,\n  items: items.map((x, i) => ({ order: i + 1, ...x })),\n  priorities: scored.slice(0, 6).map(p => ({ pattern: p.name, tier: p.tier, mastery: Number(p.m.toFixed(2)), priority: Number(p.priority.toFixed(3)), days_since: p.days_since, review_due: p.review_due })),\n  skills: scored.map(p => ({ pattern: p.name, topic: p.topic, mastery: Math.round(p.m * 100), problems_solved: p.solved, last_practiced: p.last_practiced }))\n};\nreturn [{ json: { profile_id: pf.id, email: pf.email, via: pf.via, plan } }];"
       },
       "id": "50873421-cfdb-5e0d-b24b-a9901334f25b",
       "name": "Priority Engine",
@@ -742,7 +780,11 @@
           "id": "bxT1ZL8cTIlKF9uM",
           "name": "Postgres account"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -882,7 +924,10 @@
           "id": "bxT1ZL8cTIlKF9uM",
           "name": "Postgres account"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -918,7 +963,10 @@
         500,
         1450
       ],
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
@@ -967,7 +1015,10 @@
         1000,
         1450
       ],
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
@@ -1003,7 +1054,10 @@
           "id": "bxT1ZL8cTIlKF9uM",
           "name": "Postgres account"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -1088,7 +1142,10 @@
           "name": "Postgres account"
         }
       },
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -1164,7 +1221,10 @@
           "name": "Postgres account"
         }
       },
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -1227,6 +1287,93 @@
         500,
         1950
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const err = ($input.first().json && $input.first().json.error) || {};\nconst detail = String(err.message || err.description || err || 'invalid request');\n// The most common cause by far: events sent before onboarding, while the\n// extension still holds the placeholder profile_id instead of a real UUID.\nconst needsOnboarding = detail.indexOf('profile_id') !== -1;\nreturn [{ json: {\n  success: false,\n  error: needsOnboarding ? 'profile_not_onboarded' : 'invalid_event',\n  detail,\n  hint: needsOnboarding\n    ? 'Run onboarding first: POST /webhook/dsa-coach/cold-start to get a profile_id (UUID), then save it in the extension.'\n    : 'Check the event name and required fields for this event type.'\n} }];"
+      },
+      "id": "c4d2a1b0-1101-5a00-9000-000000000101",
+      "name": "Validation Error Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// A database step in the shared skill engine failed. Whether anyone is waiting\n// on a response depends on how we got here: live extension events pass through\n// Validate Event, the nightly recalc does not.\nlet source = 'recalc';\ntry {\n  const ev = $('Validate Event').first().json;\n  if (ev && ev.event) source = ev.event === 'reflection' ? 'reflection' : 'submission';\n} catch (e) { /* cron recalc: no webhook is waiting */ }\nconst err = ($input.first().json && $input.first().json.error) || {};\nreturn [{ json: {\n  skip: true,\n  degraded: true,\n  source,\n  pattern: null,\n  detail: String(err.message || err.description || err || 'database unavailable')\n} }];"
+      },
+      "id": "c4d2a1b0-1102-5a00-9000-000000000102",
+      "name": "Skill Engine Recovery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reached only when a plan query failed. The cron run has nobody to answer, so\n// work out which trigger started this execution before responding.\nlet via = 'schedule';\ntry { if ($('Plan Webhook').first().json) via = 'webhook'; } catch (e) { /* schedule run */ }\nlet plan = null;\ntry { plan = $('Priority Engine').first().json.plan || null; } catch (e) { /* failed before planning */ }\nconst err = ($input.first().json && $input.first().json.error) || {};\nconst detail = String(err.message || err.description || err || 'database unavailable');\n// If only the save failed, the plan itself is still good — hand it over rather\n// than making the user stare at an error for work already done.\nif (plan) return [{ json: { via, success: true, warning: 'plan_not_persisted', detail, plan } }];\nreturn [{ json: { via, success: false, error: 'backend_temporarily_unavailable', detail } }];"
+      },
+      "id": "c4d2a1b0-1103-5a00-9000-000000000103",
+      "name": "Plan Error Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a7c31d90-4b52-4f18-9a6e-11d0c7e5b204",
+              "leftValue": "={{ $json.via }}",
+              "rightValue": "webhook",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c4d2a1b0-1104-5a00-9000-000000000104",
+      "name": "Plan Error Via Webhook?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1250,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "c4d2a1b0-1105-5a00-9000-000000000105",
+      "name": "Return Plan Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1500,
+        1300
+      ]
     }
   ],
   "connections": {
@@ -1246,6 +1393,13 @@
         [
           {
             "node": "Route Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validation Error Response",
             "type": "main",
             "index": 0
           }
@@ -1389,6 +1543,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Skill Engine Recovery",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -1408,6 +1569,13 @@
         [
           {
             "node": "Live Event?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skill Engine Recovery",
             "type": "main",
             "index": 0
           }
@@ -1564,6 +1732,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Plan Error Response",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -1572,6 +1747,13 @@
         [
           {
             "node": "Priority Engine",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Plan Error Response",
             "type": "main",
             "index": 0
           }
@@ -1594,6 +1776,13 @@
         [
           {
             "node": "Requested Via Webhook?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Plan Error Response",
             "type": "main",
             "index": 0
           }
@@ -1815,6 +2004,51 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "Validation Error Response": {
+      "main": [
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skill Engine Recovery": {
+      "main": [
+        [
+          {
+            "node": "Live Event?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Error Response": {
+      "main": [
+        [
+          {
+            "node": "Plan Error Via Webhook?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Error Via Webhook?": {
+      "main": [
+        [
+          {
+            "node": "Return Plan Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
       ]
     }
   },

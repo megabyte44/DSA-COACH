@@ -26,6 +26,10 @@ export interface SkillUpdate {
 
 export interface CoachResponse {
   success?: boolean;
+  error?: string;
+  detail?: string;
+  hint?: string;
+  warning?: string;
   session_id?: string;
   attempt_id?: string | null;
   event?: string;

@@ -1,6 +1,22 @@
 import { sendEvent, retryPendingEvents, submitColdStart } from './services/n8n';
 import { getSession, setSession, clearSession, saveSettings, getSettings, setPlanItemDone } from './services/storage';
-import type { Problem, ReflectionPayload, ColdStartPayload } from './types';
+import type { Problem, ReflectionPayload, ColdStartPayload, CoachResponse } from './types';
+
+/** n8n answers a rejected or degraded request with success:false plus a reason.
+ * Turn that into something worth reading in the panel. */
+function coachErrorText(res: CoachResponse): string {
+  switch (res.error) {
+    case 'profile_not_onboarded':
+      return 'Finish setup first — open Settings and run onboarding to create your coach profile.';
+    case 'skill_update_unavailable':
+      return res.coach?.message
+        || 'Attempt recorded, but the skill update could not run. It will be re-derived on the next sync.';
+    case 'backend_temporarily_unavailable':
+      return 'The coach database is unreachable right now. Your session is still being tracked.';
+    default:
+      return res.hint || res.detail || 'The coach could not process that request.';
+  }
+}
 
 // ─── Side Panel behaviour ──────────────────────────────────────────────────────
 chrome.sidePanel
@@ -50,7 +66,7 @@ async function handleMessage(message: any) {
 
       const response = await sendEvent('problem_started', { problem });
 
-      if (response) {
+      if (response && response.success !== false) {
         await setSession({
           session_id: response.session_id || null,
           coachMessage: response.coach?.message || null,
@@ -62,6 +78,8 @@ async function handleMessage(message: any) {
           isTyping: false,
           backendUnavailable: false,
         });
+      } else if (response) {
+        await setSession({ isTyping: false, coachMessage: coachErrorText(response), backendUnavailable: false });
       } else {
         await setSession({ isTyping: false, backendUnavailable: true });
       }
@@ -89,7 +107,7 @@ async function handleMessage(message: any) {
         confirm_solution: confirm_solution === true,
       });
 
-      if (response) {
+      if (response && response.success !== false) {
         const hintMsg = response.coach?.hint || null;
         await setSession({
           isTyping: false,
@@ -97,6 +115,8 @@ async function handleMessage(message: any) {
           hintMessage: hintMsg,
           coachMessage: hintMsg || session.coachMessage,
         });
+      } else if (response) {
+        await setSession({ isTyping: false, coachMessage: coachErrorText(response) });
       } else {
         await setSession({ isTyping: false });
       }
@@ -122,8 +142,12 @@ async function handleMessage(message: any) {
       });
 
       if (response) {
-        const feedbackMsg = response.coach?.message || null;
-        const feedbackType = response.result === 'accepted' || result === 'accepted' ? 'success' : 'warning';
+        const degraded = response.success === false;
+        // Even a degraded reply carries the attempt id, so reflection still works.
+        const feedbackMsg = degraded ? coachErrorText(response) : (response.coach?.message || null);
+        const feedbackType = degraded
+          ? 'warning'
+          : (response.result === 'accepted' || result === 'accepted' ? 'success' : 'warning');
         await setSession({
           isTyping: false,
           attempt_id: response.attempt_id || session.attempt_id,
@@ -205,7 +229,12 @@ async function handleMessage(message: any) {
       const payload = message.payload as ColdStartPayload;
       const response = await submitColdStart(payload);
       if (!response?.profile_id) {
-        return { success: false, error: 'Could not reach the coach backend. Check your n8n URL in Settings.' };
+        return {
+          success: false,
+          error: response
+            ? coachErrorText(response)
+            : 'Could not reach the coach backend. Check your n8n URL in Settings.',
+        };
       }
       const settings = await getSettings();
       await saveSettings({ ...settings, profile_id: response.profile_id, onboarded: true });
